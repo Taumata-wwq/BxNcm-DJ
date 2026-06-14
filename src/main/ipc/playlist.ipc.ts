@@ -248,7 +248,8 @@ export function registerPlaylistIpc(mainWindow: BrowserWindow) {
     // 判断是否是纯数字（歌曲ID）
     const idMatch = keyword.match(/^(\d{4,})$/)
     if (idMatch) {
-      return neteaseApi.searchByKeyword(keyword)
+      const song = await neteaseApi.getSongById(idMatch[1])
+      if (song) return song
     }
     // 否则按歌名搜索
     return neteaseApi.searchByKeyword(keyword)
