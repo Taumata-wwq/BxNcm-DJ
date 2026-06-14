@@ -700,7 +700,14 @@ export class LiveWS {
     uid: number
   ): Promise<SongItem | null> {
     if (parsed.type === 'netease') {
-      // 与控制台搜索逻辑保持一致：使用 cloudsearch
+      // 纯数字 ID 精确查询，与控制台搜索逻辑保持一致
+      if (!parsed.artist) {
+        const idMatch = parsed.keyword.match(/^(\d{4,})$/)
+        if (idMatch) {
+          const song = await neteaseApi.getSongById(idMatch[1])
+          if (song) return song
+        }
+      }
       const keyword = parsed.artist
         ? `${parsed.keyword} ${parsed.artist}`
         : parsed.keyword
