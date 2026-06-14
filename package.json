@@ -1,0 +1,31 @@
+{
+  "name": "bx-ncm-dj",
+  "version": "1.1.0",
+  "description": "BxNcm DJ - 网易云+B站直播点歌助手",
+  "author": "Taumata",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true});require('fs').rmSync('dist-electron',{recursive:true,force:true})\" && vite build && electron-builder",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-vue": "^5.2.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "pinia": "^2.3.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vite-plugin-electron": "^0.28.8",
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0",
+    "vue-tsc": "^2.2.0"
+  }
+}

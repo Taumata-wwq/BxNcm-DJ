@@ -1,0 +1,50 @@
+appId: com.taumata.bxncmdj
+productName: BxNcm DJ
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist-electron
+  - dist
+  - package.json
+  - README.md
+  - "!**/*.map"
+  - "!**/node_modules/.cache"
+  - "!**/node_modules/.bin"
+
+includeSubNodeModules: true
+
+compression: maximum
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: BxNcm DJ
+  uninstallDisplayName: BxNcm DJ
+  menuCategory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+
+asar: true
+
+asarUnpack:
+  - "**/node_modules/ws/**"
+  - "**/node_modules/qrcode/**"
+
+afterPack: "./scripts/after-pack.cjs"
