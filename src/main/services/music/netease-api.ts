@@ -149,6 +149,25 @@ export const neteaseApi = {
     return null
   },
 
+  /**
+   * 按歌曲数字 ID 精确查询单首歌曲信息
+   */
+  async getSongById(songId: string): Promise<SongItem | null> {
+    const cookie = getSavedCookie()
+    try {
+      const idsJsonStr = '[{"id":' + songId + '}]'
+      const result = await weapiRequest('/api/v3/song/detail', {
+        c: idsJsonStr,
+      }, cookie)
+      if (result.body.code === 200 && result.body.songs?.length > 0) {
+        return mapSongItem(result.body.songs[0])
+      }
+    } catch (e) {
+      console.error('[NeteaseApi] getSongById 失败:', (e as Error).message)
+    }
+    return null
+  },
+
   async getPlayUrl(songId: string): Promise<string> {
     const cookie = getSavedCookie()
     // 尝试最高音质：jymaster(超清母带) > hires > lossless > exhigh > standard
