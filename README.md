@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-
 # BxNcm-DJ
 
 基于 **Vue 3 + Electron + TypeScript** 的桌面端点歌助手，支持**网易云音乐**和 **Bilibili 视频**双源播放，通过 B站直播弹幕实现观众点歌互动。
