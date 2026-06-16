@@ -5,7 +5,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkAutoLogin: () => ipcRenderer.invoke('auto-login:check'),
 
   // 弹幕
-  connectDanmaku: (roomId: number) => ipcRenderer.invoke('danmaku:connect', roomId),
+  connectDanmaku: (roomId: number) =>
+    ipcRenderer.invoke('danmaku:connect', roomId),
   disconnectDanmaku: () => ipcRenderer.invoke('danmaku:disconnect'),
   sendDanmaku: (roomId: number, msg: string, emoticonUnique?: string, emoticonId?: number, dmType?: number) =>
     ipcRenderer.invoke('danmaku:send', roomId, msg, emoticonUnique, emoticonId, dmType),
@@ -117,6 +118,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentCache: () => ipcRenderer.invoke('cache:get-recent'),
   clearCache: () => ipcRenderer.invoke('cache:clear'),
 
+  // 音频文件缓存
+  getAudioCacheList: () => ipcRenderer.invoke('audio-cache:list'),
+  clearAudioCache: () => ipcRenderer.invoke('audio-cache:clear'),
+  prefetchAudioCache: (songIds: string[]) => ipcRenderer.invoke('audio-cache:prefetch', songIds),
+  prefetchQueueOnStartup: () => ipcRenderer.invoke('audio-cache:prefetch-queue'),
+
   // 窗口控制
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
   maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
@@ -158,6 +165,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   liveStop: (roomId: number) => ipcRenderer.invoke('live:stop', roomId),
   getLiveArea: () => ipcRenderer.invoke('settings:get-live-area'),
   setLiveArea: (parentAreaIdx: number, subAreaId: number) => ipcRenderer.invoke('settings:set-live-area', parentAreaIdx, subAreaId),
+
+  // blivechat 身份码
+  fetchIdentityCode: () => ipcRenderer.invoke('auth:fetch-identity-code'),
+  // blivechat CSS 注入（通过主进程在子 frame 中执行 JavaScript）
+  injectCssToBlivechatFrame: (css: string) => ipcRenderer.invoke('danmaku:inject-css', css),
+  // 表情包图片缓存
+  cacheEmoticonImages: (packages: any[]) => ipcRenderer.invoke('emoticon:cache-images', packages),
+  clearEmoticonCache: () => ipcRenderer.invoke('emoticon:clear-cache'),
 
   // OBS 叠加层 - 广播数据到 WebSocket 客户端
   obsBroadcastLyric: (text: string, translation: string) => ipcRenderer.send('obs:broadcast-lyric', { text, translation }),

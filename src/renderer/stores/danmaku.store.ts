@@ -35,16 +35,32 @@ export const useDanmakuStore = defineStore('danmaku', () => {
   }
 
   function addViewer(viewer: ViewerInfo) {
-    // 去重：同一 uid 只保留最新
+    // 已存在：仅更新可变字段，不改变数组顺序，避免头像闪烁
     const existingIdx = viewers.value.findIndex(v => v.uid === viewer.uid)
     if (existingIdx !== -1) {
-      viewers.value.splice(existingIdx, 1)
+      const existing = viewers.value[existingIdx]
+      if (existing.avatarUrl !== viewer.avatarUrl || existing.uname !== viewer.uname) {
+        // 创建新对象触发响应式更新，但不改变数组顺序
+        viewers.value[existingIdx] = { ...viewer }
+      }
+      return
     }
+    // 新增观众
     viewers.value.push(viewer)
     if (viewers.value.length > MAX_VIEWERS) {
       viewers.value = viewers.value.slice(-MAX_VIEWERS)
     }
   }
 
-  return { status, logs, messages, viewers, updateStatus, addLog, addMessage, addViewer }
+  /** 批量替换观众列表（用于定时全量刷新） */
+  function setViewers(newViewers: ViewerInfo[]) {
+    viewers.value = newViewers.slice(0, MAX_VIEWERS)
+  }
+
+  /** 清除观众列表（断开连接时） */
+  function clearViewers() {
+    viewers.value = []
+  }
+
+  return { status, logs, messages, viewers, updateStatus, addLog, addMessage, addViewer, setViewers, clearViewers }
 })

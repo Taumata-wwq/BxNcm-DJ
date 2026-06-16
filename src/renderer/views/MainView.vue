@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, inject, watch } from 'vue'
+import { ref, onMounted, onUnmounted, inject, watch, provide } from 'vue'
 import { useAuthStore } from '../stores/auth.store'
 import { usePlaylistStore } from '../stores/playlist.store'
 import { usePlayerStore } from '../stores/player.store'
@@ -78,6 +78,10 @@ const updateLoadingProgress = inject<(pct: number, task: string) => void>('updat
 const leftWidth = ref(settingsStore.settings.splitterLeft)
 const upperHeight = ref(settingsStore.settings.splitterUpper)
 
+// 分割条拖拽状态：拖拽期间禁用 iframe 的 pointer-events，防止 mouseup 被吞
+const splitterDragging = ref(false)
+provide('splitterDragging', splitterDragging)
+
 // 同步 store 中的分屏位置到 UI ref（覆盖持久化恢复/重置场景）
 watch(() => settingsStore.settings.splitterLeft, (v) => { leftWidth.value = v })
 watch(() => settingsStore.settings.splitterUpper, (v) => { upperHeight.value = v })
@@ -86,6 +90,7 @@ type DragAxis = 'h' | 'v'
 
 function startDragSplitter(e: MouseEvent, axis: DragAxis) {
   e.preventDefault()
+  splitterDragging.value = true
   const startX = e.clientX
   const startY = e.clientY
   const startW = leftWidth.value
@@ -106,6 +111,7 @@ function startDragSplitter(e: MouseEvent, axis: DragAxis) {
   const onUp = () => {
     document.removeEventListener('mousemove', onMove)
     document.removeEventListener('mouseup', onUp)
+    splitterDragging.value = false
     // 持久化位置
     settingsStore.settings.splitterLeft = leftWidth.value
     settingsStore.settings.splitterUpper = upperHeight.value
@@ -136,7 +142,7 @@ function handleKeyDown(e: KeyboardEvent) {
       e.preventDefault()
       if (keyRepeatTimers['left']) return // 已有长按定时器，不重复触发
       const SEEK_STEP = 0.5
-      const SEEK_INTERVAL = 10
+      const SEEK_INTERVAL = 100
       const target = Math.max(0, playerStore.currentTime - SEEK_STEP)
       playerStore.seek(target)
       keyRepeatTimers['left'] = setInterval(() => {
@@ -149,7 +155,7 @@ function handleKeyDown(e: KeyboardEvent) {
       e.preventDefault()
       if (keyRepeatTimers['right']) return
       const SEEK_STEP = 0.5
-      const SEEK_INTERVAL = 10
+      const SEEK_INTERVAL = 100
       const target = Math.min(playerStore.duration, playerStore.currentTime + SEEK_STEP)
       playerStore.seek(target)
       keyRepeatTimers['right'] = setInterval(() => {
@@ -186,18 +192,10 @@ function handleKeyUp(e: KeyboardEvent) {
   }
 }
 
-// 需要焦点在窗口内才生效（document level）
-document.addEventListener('keydown', handleKeyDown)
-document.addEventListener('keyup', handleKeyUp)
-
-// OBS 轮询定时器引用（事件驱动模式下已移除）
-
 onMounted(async () => {
-  // ====== 关闭前保存：显式保存设置后再通知主进程可退出 ======
-  window.electronAPI.onBeforeClose(async () => {
-    try { await settingsStore.save() } catch (e) { console.error('[MainView] 关闭前保存失败:', e) }
-    window.electronAPI.appSaveDone()
-  })
+  // ====== 全局键盘快捷键（需在组件挂载后注册，卸载时清理） ======
+  document.addEventListener('keydown', handleKeyDown)
+  document.addEventListener('keyup', handleKeyUp)
 
   // 音量变化自动保存到设置
   watch(() => playerStore.volume, (vol) => {
@@ -211,7 +209,6 @@ onMounted(async () => {
 
   // ====== 2. 注册 IPC 监听器 ======
   window.electronAPI.onDanmakuStatusChanged((s: any) => danmakuStore.updateStatus(s))
-  window.electronAPI.onDanmakuMessage((msg: any) => danmakuStore.addMessage(msg))
   window.electronAPI.onPlaylistUpdated((list: any[]) => playlistStore.updateQueue(list))
   window.electronAPI.onPlayerStateChanged((state: any) => playerStore.updateState(state))
   window.electronAPI.onPlayerTimeUpdate((t: number, d: number) => playerStore.updateTime(t, d))
@@ -261,8 +258,11 @@ onMounted(async () => {
   if (otherId) {
     const otherLabel = otherSource === 'netease' ? '网易云歌单' : 'B站视频列表'
     updateLoadingProgress(85, `正在预加载${otherLabel}...`)
-    await window.electronAPI.cacheOnlyIdlePlaylist(otherSource, otherId).catch(() => {})
+    await window.electronAPI.cacheOnlyIdlePlaylist(otherSource, otherId).catch((e: any) => { console.error('[MainView] cacheOnlyIdlePlaylist failed:', e) })
   }
+
+  // ====== 4.6 启动时预缓存队列中非空闲歌曲（后台下载，不阻塞） ======
+  window.electronAPI.prefetchQueueOnStartup().catch((e: any) => { console.error('[MainView] prefetchQueueOnStartup failed:', e) })
 
   // ====== 5. 设置首曲信息（暂停状态，高亮队列第一项，根据源设 playerType） ======
   // 优先使用 IPC 响应中的同步数据，确保 overlay 淡出前 playerStore 已就绪
@@ -288,6 +288,19 @@ onMounted(async () => {
         await window.electronAPI.connectDanmaku(roomInfo.roomId)
       }
     } catch (e) { console.error('[MainView] getBilibiliLiveRoom failed:', e) }
+
+    // 自动获取 blivechat 身份码（如果尚未设置）
+    if (!settingsStore.settings.identityCode) {
+      try {
+        const result = await window.electronAPI.fetchIdentityCode()
+        if (result.success && result.code) {
+          settingsStore.settings.identityCode = result.code
+          danmakuStore.addLog(`自动获取身份码: ${result.code}`)
+        }
+      } catch (e) {
+        console.warn('[MainView] 自动获取身份码失败:', e)
+      }
+    }
   }
 
   // ====== 8. 启动 OBS 叠加层 HTTP 服务（如果设置中已启用） ======
@@ -360,14 +373,22 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  // 事件驱动模式：无需清理轮询定时器
+  document.removeEventListener('keydown', handleKeyDown)
+  document.removeEventListener('keyup', handleKeyUp)
+  // 清理所有长按定时器
+  for (const key of Object.keys(keyRepeatTimers)) {
+    if (keyRepeatTimers[key]) {
+      clearInterval(keyRepeatTimers[key]!)
+      keyRepeatTimers[key] = null
+    }
+  }
 })
 </script>
 
 <style scoped>
 .main-layout { display: flex; flex-direction: column; height: 100vh; background: var(--bg-primary); color: var(--text-primary); }
 .main-body { display: flex; flex: 1; overflow: hidden; }
-.left-sidebar { display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--sidebar-bg); flex-shrink: 0; }
+.left-sidebar { display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--sidebar-bg); flex-shrink: 0; overflow: hidden; }
 .splitter { flex-shrink: 0; background: var(--border); transition: background 0.15s; }
 .splitter:hover { background: var(--accent); }
 .splitter-h { width: 2px; cursor: col-resize; }

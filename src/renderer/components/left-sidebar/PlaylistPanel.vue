@@ -63,12 +63,10 @@ function bindTextEl(el: unknown, songId: string) {
 }
 
 /** hover 驱动：鼠标悬停 0.5s 后触发左右循环滚动 */
-const isHovering = ref<Record<string, boolean>>({})
 const marqueeTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const activeRolls = new Map<string, boolean>()
 
 function startHover(songId: string) {
-  isHovering.value = { ...isHovering.value, [songId]: true }
   activeRolls.set(songId, true)
   const timer = setTimeout(() => startRoll(songId), 500)
   marqueeTimers.set(songId, timer)
@@ -79,7 +77,6 @@ function stopHover(songId: string) {
   if (t) clearTimeout(t)
   marqueeTimers.delete(songId)
   activeRolls.delete(songId)
-  isHovering.value = { ...isHovering.value, [songId]: false }
   // 立刻停止并回到原位
   const el = textElMap.get(songId)
   if (el) {

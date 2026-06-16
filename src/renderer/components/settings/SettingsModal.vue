@@ -10,18 +10,22 @@
         </button>
       </div>
       <div class="modal-layout">
-        <!-- 左侧导航栏 -->
+        <!-- 左侧分类标签 -->
         <nav class="settings-nav">
           <button
-            v-for="item in navItems"
-            :key="item.id"
+            v-for="cat in categories"
+            :key="cat.id"
             class="nav-item"
-            :class="{ active: activeNav === item.id }"
-            @click="scrollToSection(item.id)"
-          >{{ item.label }}</button>
+            :class="{ active: activeCategory === cat.id }"
+            @click="switchCategory(cat.id)"
+          >{{ cat.label }}</button>
         </nav>
         <!-- 右侧内容区 -->
         <div ref="settingsBodyRef" class="modal-body" @scroll="onBodyScroll">
+
+        <!-- ==================== 基本 ==================== -->
+        <div v-show="activeCategory === 'basic'">
+
         <!-- 帐号 -->
         <div id="section-account" class="section">
           <h3>帐号</h3>
@@ -72,17 +76,11 @@
           </div>
         </div>
 
-        <!-- 弹幕 -->
-        <div id="section-danmaku" class="section">
-          <h3>弹幕</h3>
-          <div class="setting-row">
-            <span>显示弹幕时间</span>
-            <label class="toggle-label">
-              <input type="checkbox" :checked="settingsStore.settings.showDanmakuTime" @change="toggleDanmakuTime" />
-              <span class="toggle-text">{{ settingsStore.settings.showDanmakuTime ? '显示' : '隐藏' }}</span>
-            </label>
-          </div>
-        </div>
+        </div><!-- end basic -->
+
+
+        <!-- ==================== 歌曲 ==================== -->
+        <div v-show="activeCategory === 'songs'">
 
         <!-- 点歌规则 -->
         <div id="section-song-request" class="section">
@@ -99,22 +97,6 @@
             <span>同歌曲间隔(秒)</span>
             <input v-model.number="settingsStore.settings.songCooldown" type="number" class="input" />
           </div>
-        </div>
-
-        <!-- 缓存 -->
-        <div id="section-cache" class="section">
-          <h3>本地缓存</h3>
-          <div class="cache-list" v-if="cacheSongs.length > 0">
-            <div v-for="(entry, i) in cacheSongs" :key="entry.songId || entry.id" class="cache-item">
-              <button class="add-btn" @click="playCached(entry)" title="添加到队列">+</button>
-              <span class="cache-idx">{{ i + 1 }}</span>
-              <span class="cache-title">{{ entry.title }}</span>
-              <span class="cache-artist">{{ entry.artist }}</span>
-            </div>
-          </div>
-          <div v-else class="cache-empty">暂无缓存</div>
-          <button v-if="cacheSongs.length > 0" class="btn clear-cache-btn" @click="clearAllCache">清空缓存</button>
-          <p class="section-desc" style="margin-top: 6px;">点击加号再次添加到队列</p>
         </div>
 
         <!-- 歌词 -->
@@ -202,6 +184,190 @@
           </div>
         </div>
 
+        <!-- 缓存 -->
+        <div id="section-cache" class="section">
+          <h3>音频文件缓存 <span class="cache-count">({{ cacheSongs.length }}/20)</span></h3>
+          <div class="cache-list" v-if="cacheSongs.length > 0">
+            <div v-for="(entry, i) in cacheSongs" :key="entry.songId" class="cache-item">
+              <button class="add-btn" @click="playCached(entry)" title="添加到队列">+</button>
+              <span class="cache-idx">{{ i + 1 }}</span>
+              <span class="cache-title">{{ entry.title || '(未知)' }}</span>
+              <span class="cache-artist">{{ entry.artist }}</span>
+              <span class="cache-size">{{ formatSize(entry.size) }}</span>
+            </div>
+          </div>
+          <div v-else class="cache-empty">暂无缓存文件</div>
+          <button v-if="cacheSongs.length > 0" class="btn clear-cache-btn" @click="clearAllCache">清空缓存</button>
+          <p class="section-desc" style="margin-top: 6px;">自动缓存队列后续歌曲，最多20首，超出自动清理。点击 + 添加到队列</p>
+        </div>
+
+        </div><!-- end songs -->
+
+
+        <!-- ==================== 弹幕 ==================== -->
+        <div v-show="activeCategory === 'danmaku'">
+
+        <!-- 常规 -->
+        <div id="section-danmaku-general" class="section">
+          <h3>常规</h3>
+          <div class="setting-row">
+            <span>显示弹幕</span>
+            <label class="toggle-label">
+              <input type="checkbox" v-model="settingsStore.settings.showDanmaku" />
+              <span class="toggle-text">{{ settingsStore.settings.showDanmaku ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <span>显示付费消息</span>
+            <label class="toggle-label">
+              <input type="checkbox" v-model="settingsStore.settings.showPaidMessages" />
+              <span class="toggle-text">{{ settingsStore.settings.showPaidMessages ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <span>最低付费价格</span>
+            <div class="input-with-unit">
+              <input v-model.number="settingsStore.settings.minPaidMessagePrice" type="number" class="input" min="0" step="0.1" />
+              <span class="unit">元</span>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>最多显示消息数</span>
+            <div class="range-row">
+              <span class="range-value">{{ settingsStore.settings.maxDanmakuCount }}</span>
+              <input
+                type="range"
+                min="10"
+                max="500"
+                step="10"
+                v-model.number="settingsStore.settings.maxDanmakuCount"
+                class="range-slider"
+              />
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>合并相似弹幕</span>
+            <label class="toggle-label">
+              <input type="checkbox" v-model="settingsStore.settings.mergeSimilarDanmaku" />
+              <span class="toggle-text">{{ settingsStore.settings.mergeSimilarDanmaku ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <span>合并连续礼物</span>
+            <label class="toggle-label">
+              <input type="checkbox" v-model="settingsStore.settings.mergeSimilarGift" />
+              <span class="toggle-text">{{ settingsStore.settings.mergeSimilarGift ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 屏蔽 -->
+        <div id="section-danmaku-block" class="section">
+          <h3>屏蔽</h3>
+          <div class="setting-row">
+            <span>屏蔽礼物弹幕</span>
+            <label class="toggle-label">
+              <input type="checkbox" v-model="settingsStore.settings.blockGiftDanmaku" />
+              <span class="toggle-text">{{ settingsStore.settings.blockGiftDanmaku ? '已屏蔽' : '未屏蔽' }}</span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <span>用户等级屏蔽</span>
+            <div class="range-row">
+              <span class="range-value">{{ settingsStore.settings.blockLevel }}</span>
+              <input
+                type="range"
+                min="0"
+                max="60"
+                step="1"
+                v-model.number="settingsStore.settings.blockLevel"
+                class="range-slider"
+              />
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>粉丝牌等级屏蔽</span>
+            <div class="range-row">
+              <span class="range-value">{{ settingsStore.settings.blockMedalLevel }}</span>
+              <input
+                type="range"
+                min="0"
+                max="120"
+                step="1"
+                v-model.number="settingsStore.settings.blockMedalLevel"
+                class="range-slider"
+              />
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>屏蔽关键词</span>
+          </div>
+          <div class="setting-row">
+            <textarea
+              v-model="settingsStore.settings.blockKeywords"
+              class="textarea"
+              rows="4"
+              placeholder="每行一个关键词"
+            ></textarea>
+          </div>
+          <div class="setting-row">
+            <span>屏蔽用户</span>
+          </div>
+          <div class="setting-row">
+            <textarea
+              v-model="settingsStore.settings.blockUsers"
+              class="textarea"
+              rows="4"
+              placeholder="每行一个用户UID"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- 高级 -->
+        <div id="section-danmaku-advanced" class="section">
+          <h3>高级</h3>
+          <div class="setting-row">
+            <span>显示礼物名</span>
+            <label class="toggle-label">
+              <input type="checkbox" v-model="settingsStore.settings.showGiftName" />
+              <span class="toggle-text">{{ settingsStore.settings.showGiftName ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <span>显示弹幕时间</span>
+            <label class="toggle-label">
+              <input type="checkbox" v-model="settingsStore.settings.showDanmakuTime" />
+              <span class="toggle-text">{{ settingsStore.settings.showDanmakuTime ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <span>显示调试信息</span>
+            <label class="toggle-label">
+              <input type="checkbox" v-model="settingsStore.settings.showDebugMessages" />
+              <span class="toggle-text">{{ settingsStore.settings.showDebugMessages ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <span>自定义 CSS</span>
+          </div>
+          <div class="setting-row">
+            <textarea
+              v-model="settingsStore.settings.customDanmakuCss"
+              class="textarea css-textarea"
+              rows="20"
+              placeholder="/* 在此输入自定义 CSS */"
+            ></textarea>
+          </div>
+          <p class="section-desc" style="margin-top: 4px;">自定义 CSS 将注入到 blive.chat 弹幕 iframe 中，覆盖默认弹幕样式。输入后即时生效。</p>
+          <button class="btn" style="margin-top: 6px;" @click="resetDanmakuCss">重置为默认</button>
+        </div>
+
+        </div><!-- end danmaku -->
+
+
+        <!-- ==================== OBS ==================== -->
+        <div v-show="activeCategory === 'obs'">
+
         <!-- OBS 叠加层 -->
         <div id="section-obs-overlay" class="section">
           <h3>OBS 叠加层</h3>
@@ -221,6 +387,9 @@
                 <button class="btn" @click="openStyleWindow">打开</button>
               </div>
             </div>
+            <p class="section-desc">
+              打开「样式设置地址」可调整各叠加层的字体、颜色等样式。
+            </p>
             <div class="setting-row">
               <span>歌词叠加层</span>
               <div class="path-row">
@@ -243,11 +412,78 @@
               </div>
             </div>
             <p class="section-desc">
-              在浏览器中打开「样式设置地址」可调整各叠加层的字体、颜色等样式。<br/>
               将歌词/队列/歌曲地址粘贴到 OBS「浏览器」源即可实时捕获。
             </p>
           </template>
         </div>
+        <!-- 弹幕捕获 -->
+        <div id="section-danmaku-capture" class="section">
+          <h3>弹幕捕获</h3>
+          <div class="setting-row">
+            <span>身份码</span>
+            <div class="path-row">
+              <input
+                v-model="settingsStore.settings.identityCode"
+                class="input input-path"
+                placeholder="点击「获取」自动填写"
+              />
+              <button class="btn" @click="fetchIdentityCode" :disabled="idCodeLoading">
+                {{ idCodeLoading ? '加载' : '获取' }}
+              </button>
+            </div>
+          </div>
+          <p class="section-desc" style="margin-top: 2px;">
+            身份码用于 blivechat 弹幕捕获，登录后自动获取。获取失败可在 <a href="https://link.bilibili.com/#/my-room/start-live" target="_blank" class="link">开播设置</a> 查看并手动填入。
+          </p>
+          <div class="setting-row">
+            <span>blivechat地址</span>
+            <div class="path-row">
+              <input
+                readonly
+                class="input input-path"
+                :placeholder="blivechatUrl"
+              />
+              <button class="btn" @click="copyText(blivechatUrl)">复制</button>
+            </div>
+          </div>
+          <p class="section-desc">
+            将此地址粘贴到 OBS「浏览器」源，即可在直播画面中捕获弹幕。
+          </p>
+          <div class="setting-row">
+            <span>blivechat CSS</span>
+            <div class="path-row">
+              <input
+                readonly
+                class="input input-path"
+                placeholder="https://blive.chat/stylegen"
+              />
+              <button class="btn" @click="copyText('https://blive.chat/stylegen')">复制</button>
+            </div>
+          </div>
+          <p class="section-desc">
+            打开 blivechat 样式生成器，生成自定义 CSS 后粘贴到 OBS 浏览器源的「自定义 CSS」中。
+          </p>
+          <div class="setting-row">
+            <span>自定义 CSS</span>
+          </div>
+          <div class="setting-row">
+            <textarea
+              v-model="settingsStore.settings.customDanmakuCss"
+              class="textarea css-textarea"
+              rows="12"
+              placeholder="/* 将 blivechat/stylegen 生成的 CSS 粘贴到这里 */"
+            ></textarea>
+          </div>
+          <p class="section-desc">
+            此 CSS 将注入到 in-app 弹幕显示以及 OBS 浏览器源中。修改后即时生效。
+          </p>
+        </div>
+
+        </div><!-- end obs -->
+
+
+        <!-- ==================== 关于 ==================== -->
+        <div v-show="activeCategory === 'about'">
 
         <!-- 日志 -->
         <div id="section-log" class="section">
@@ -256,6 +492,12 @@
             <div v-for="(log, i) in danmakuStore.logs" :key="i" class="log-line">{{ log }}</div>
             <div v-if="danmakuStore.logs.length === 0" class="log-empty">暂无日志</div>
           </div>
+        </div>
+
+        <!-- 致谢 -->
+        <div id="section-thanks" class="section">
+          <h3>致谢</h3>
+          <p class="thanks-text">blivechat</p>
         </div>
 
         <!-- 关于 -->
@@ -269,6 +511,7 @@
             </div>
           </div>
         </div>
+        </div><!-- end about -->
       </div><!-- end modal-body -->
       </div><!-- end modal-layout -->
     </div>
@@ -285,13 +528,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, onMounted, watch, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth.store'
 import { useSettingsStore } from '../../stores/settings.store'
 import { useDanmakuStore } from '../../stores/danmaku.store'
 import ColorPicker from './ColorPicker.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import defaultDanmakuCss from '../../assets/styles/danmaku.css?raw'
 
 const emit = defineEmits(['close'])
 const router = useRouter()
@@ -306,66 +550,152 @@ const idleQueueSize = ref(3)
 const obsPort = ref(0)
 const logContainerRef = ref<HTMLElement | null>(null)
 const settingsBodyRef = ref<HTMLElement | null>(null)
-const activeNav = ref('account')
+const activeCategory = ref('basic')
+const idCodeLoading = ref(false)
 let navLocked = false
 let navLockTimer: ReturnType<typeof setTimeout> | null = null
 
-// 设置导航项
-const navItems = [
-  { id: 'account', label: '帐号' },
-  { id: 'appearance', label: '外观' },
-  { id: 'window', label: '窗口' },
+/** 计算 blivechat 地址：基于身份码 + 完整弹幕设置 */
+const blivechatUrl = computed(() => {
+  const code = settingsStore.settings.identityCode
+  if (!code) return ''
+  const s = settingsStore.settings
+  const params = new URLSearchParams()
+  params.set('roomKeyType', '2')
+  params.set('lang', s.blivechatLang || 'zh')
+  // 显示控制
+  params.set('showDanmaku', s.showDanmaku ? 'true' : 'false')
+  params.set('showGift', s.showPaidMessages ? 'true' : 'false')
+  params.set('showGiftName', s.showGiftName ? 'true' : 'false')
+  params.set('mergeSimilarDanmaku', s.mergeSimilarDanmaku ? 'true' : 'false')
+  params.set('mergeGift', s.mergeSimilarGift ? 'true' : 'false')
+  params.set('maxNumber', String(s.maxDanmakuCount))
+  params.set('minGiftPrice', String(s.minPaidMessagePrice))
+  // 屏蔽
+  params.set('blockGiftDanmaku', s.blockGiftDanmaku ? 'true' : 'false')
+  params.set('blockMirrorMessages', s.blockMirrorMessages ? 'true' : 'false')
+  params.set('blockLevel', String(s.blockLevel))
+  params.set('blockMedalLevel', String(s.blockMedalLevel))
+  params.set('blockNewbie', s.blockNewbie ? 'true' : 'false')
+  params.set('blockNotMobileVerified', s.blockNotMobileVerified ? 'true' : 'false')
+  if (s.blockKeywords) params.set('blockKeywords', s.blockKeywords)
+  if (s.blockUsers) params.set('blockUsers', s.blockUsers)
+  // 调试
+  params.set('showDebugMessages', s.showDebugMessages ? 'true' : 'false')
+  return `https://blive.chat/room/${code}?${params.toString()}`
+})
+
+// 分类标签
+const categories = [
+  { id: 'basic', label: '基本' },
+  { id: 'songs', label: '歌曲' },
   { id: 'danmaku', label: '弹幕' },
-  { id: 'song-request', label: '点歌规则' },
-  { id: 'cache', label: '本地缓存' },
-  { id: 'lyric', label: '歌词' },
-  { id: 'idle', label: '空闲歌单' },
-  { id: 'obs-overlay', label: 'OBS叠加层' },
-  { id: 'log', label: '日志' },
+  { id: 'obs', label: 'OBS' },
   { id: 'about', label: '关于' },
 ]
 
-/** 点击导航项，滚动到对应 section（锁定高亮直到用户滚动） */
-function scrollToSection(id: string) {
-  activeNav.value = id
+// section ID → 分类 ID 映射（用于滚动高亮）
+const sectionToCategory: Record<string, string> = {
+  'account': 'basic',
+  'appearance': 'basic',
+  'window': 'basic',
+  'song-request': 'songs',
+  'lyric': 'songs',
+  'idle': 'songs',
+  'cache': 'songs',
+  'danmaku-general': 'danmaku',
+  'danmaku-block': 'danmaku',
+  'danmaku-advanced': 'danmaku',
+  'danmaku-customcss': 'danmaku',
+  'obs-overlay': 'obs',
+  'log': 'about',
+  'thanks': 'about',
+  'about': 'about',
+}
+
+// 每个分类的第一个 section（用于 switchCategory 时滚动定位）
+const categoryFirstSection: Record<string, string> = {
+  'basic': 'account',
+  'songs': 'song-request',
+  'danmaku': 'danmaku-general',
+  'obs': 'obs-overlay',
+  'about': 'log',
+}
+
+/** showDebugMessages 已在 AppSettings 中定义，直接绑定 */
+
+/** 点击分类标签，切换视图并滚动到该分类第一个 section */
+function switchCategory(catId: string) {
+  activeCategory.value = catId
   navLocked = true
   if (navLockTimer) clearTimeout(navLockTimer)
   navLockTimer = setTimeout(() => { navLocked = false }, 600)
-  const el = document.getElementById(`section-${id}`)
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const firstSectionId = categoryFirstSection[catId]
+  if (firstSectionId) {
+    const el = document.getElementById(`section-${firstSectionId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
   }
 }
 
-/** 滚动时自动高亮当前可见的 section */
+/** 滚动时自动高亮当前可见 section 所属的分类 */
 function onBodyScroll() {
   if (navLocked) return
   const container = settingsBodyRef.value
   if (!container) return
-  // 偏移 180px，确保 section 标题已经进入视野才切换
   const containerTop = container.scrollTop + 180
-  for (let i = navItems.length - 1; i >= 0; i--) {
-    const el = document.getElementById(`section-${navItems[i].id}`)
-    if (el && el.offsetTop <= containerTop) {
-      activeNav.value = navItems[i].id
-      break
+  for (let i = categories.length - 1; i >= 0; i--) {
+    const catId = categories[i].id
+    // 找到该分类下最后一个有 offsetParent（可见）的 section
+    const sectionsForCat = Object.entries(sectionToCategory)
+      .filter(([, cat]) => cat === catId)
+      .map(([sec]) => sec)
+    for (let j = sectionsForCat.length - 1; j >= 0; j--) {
+      const el = document.getElementById(`section-${sectionsForCat[j]}`)
+      if (el && el.offsetTop <= containerTop && el.offsetParent !== null) {
+        activeCategory.value = catId
+        return
+      }
     }
   }
 }
 
 onMounted(async () => {
+  // 初始化自定义 CSS：如果为空，使用 danmaku.css 作为默认可编辑文本
+  if (!settingsStore.settings.customDanmakuCss) {
+    settingsStore.settings.customDanmakuCss = defaultDanmakuCss
+  }
+
   try { alwaysOnTop.value = await window.electronAPI.isAlwaysOnTop() } catch {}
   try { isResizable.value = await window.electronAPI.isResizable() } catch {}
-  try { cacheSongs.value = await window.electronAPI.getRecentCache() } catch {}
+  try { cacheSongs.value = await window.electronAPI.getAudioCacheList() } catch {}
   try { idleQueueSize.value = await window.electronAPI.getIdleQueueSize() } catch {}
   try { obsPort.value = await window.electronAPI.getObsPort() } catch {}
 
   // 如果 OBS 服务已开启但端口未获取到，重试一次
   if (obsPort.value === 0 && settingsStore.settings.obsOverlayEnabled) {
-    // 可能服务已运行但初次获取失败，稍后重试
     setTimeout(async () => {
       try { obsPort.value = await window.electronAPI.getObsPort() } catch {}
     }, 500)
+  }
+
+  // 启动时自动获取身份码：如果为空且已登录B站
+  if (!settingsStore.settings.identityCode && authStore.authState.bilibili) {
+    setTimeout(async () => {
+      try {
+        idCodeLoading.value = true
+        const result = await window.electronAPI.fetchIdentityCode()
+        if (result.success && result.code) {
+          settingsStore.settings.identityCode = result.code
+        }
+      } catch (e) {
+        // 静默失败，用户可以手动点击获取
+        console.warn('[SettingsModal] 自动获取身份码失败:', e)
+      } finally {
+        idCodeLoading.value = false
+      }
+    }, 800)
   }
 })
 
@@ -408,17 +738,15 @@ function resetAccent() {
 }
 
 async function playCached(entry: any) {
-  // HistoryEntry 使用 songId/sourceId 非 id；需重建 SongItem 兼容对象
   const song: any = {
-    id: entry.songId ?? entry.id,
-    sourceId: entry.sourceId,
-    // 根据 sourceId 推断来源：BV 开头为B站，其余为网易云
-    source: entry.sourceId?.startsWith?.('BV') ? 'bilibili' : 'netease',
-    title: entry.title,
+    id: entry.songId,
+    sourceId: entry.songId?.replace(/^(ne_|bv_)/, '') || '',
+    source: entry.songId?.startsWith?.('bv_') ? 'bilibili' : 'netease',
+    title: entry.title || '',
     artist: entry.artist || '',
-    coverUrl: entry.coverUrl || '',
-    duration: entry.duration || 0,
-    cid: entry.cid || 0,
+    coverUrl: '',
+    duration: 0,
+    cid: 0,
     requesterName: '控制台',
   }
   await window.electronAPI.playlistInsertTop(song)
@@ -426,9 +754,15 @@ async function playCached(entry: any) {
 
 async function clearAllCache() {
   try {
-    await window.electronAPI.clearCache()
+    await window.electronAPI.clearAudioCache()
     cacheSongs.value = []
   } catch (e) { console.error('[SettingsModal] clearAllCache failed:', e) }
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return bytes + 'B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB'
+  return (bytes / 1024 / 1024).toFixed(1) + 'MB'
 }
 
 async function onObsOverlayToggled(event: Event) {
@@ -448,6 +782,30 @@ function copyObsUrl(page: string) {
   if (obsPort.value <= 0) return
   const url = `http://localhost:${obsPort.value}/${page}`
   navigator.clipboard.writeText(url)
+}
+
+/** 复制文本到剪贴板 */
+function copyText(text: string) {
+  if (!text) return
+  navigator.clipboard.writeText(text)
+}
+
+/** 获取 blivechat 身份码 */
+async function fetchIdentityCode() {
+  idCodeLoading.value = true
+  try {
+    const result = await window.electronAPI.fetchIdentityCode()
+    if (result.success && result.code) {
+      settingsStore.settings.identityCode = result.code
+    } else {
+      alert('获取身份码失败：' + (result.message || '未知错误'))
+    }
+  } catch (e) {
+    console.error('[SettingsModal] fetchIdentityCode 失败:', e)
+    alert('获取身份码失败：' + (e as Error).message)
+  } finally {
+    idCodeLoading.value = false
+  }
 }
 
 function openStyleWindow() {
@@ -483,8 +841,8 @@ function toggleSplitTranslation() {
   settingsStore.settings.splitLyricTranslation = !settingsStore.settings.splitLyricTranslation
 }
 
-function toggleDanmakuTime() {
-  settingsStore.settings.showDanmakuTime = !settingsStore.settings.showDanmakuTime
+function resetDanmakuCss() {
+  settingsStore.settings.customDanmakuCss = defaultDanmakuCss
 }
 
 const showResetConfirm = ref(false)
@@ -496,7 +854,8 @@ function resetAllData() {
 async function handleResetConfirm() {
   try {
     await window.electronAPI.resetAllData()
-    // 等待数据落盘后重启
+    // 清除 renderer 端 localStorage 中的表情包缓存（主进程已删除磁盘缓存文件）
+    localStorage.removeItem('bili_emoticon_cache_v2')
     await new Promise(r => setTimeout(r, 300))
     await window.electronAPI.appRelaunch()
   } catch (e) {
@@ -518,10 +877,11 @@ async function openDevTools() {
 <style scoped>
 .modal-overlay {
   position: fixed; inset: 0; background: var(--modal-overlay); display: flex;
-  align-items: center; justify-content: center; z-index: 1000;
+  align-items: flex-start; justify-content: center; z-index: 1000;
+  padding: 8vh 0;
 }
 .modal-content {
-  width: 560px; max-height: 80vh; background: var(--modal-bg);
+  width: 560px; height: 84vh; max-height: 84vh; background: var(--modal-bg);
   border: 1px solid var(--border); display: flex; flex-direction: column;
 }
 .modal-header {
@@ -539,7 +899,7 @@ async function openDevTools() {
 /* 左右布局：导航栏 + 内容 */
 .modal-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 
-/* 左侧导航栏 */
+/* 左侧分类标签 */
 .settings-nav {
   width: 80px; flex-shrink: 0; overflow-y: auto; padding: 6px 0;
   border-right: 1px solid var(--section-border); background: var(--bg-secondary);
@@ -547,7 +907,7 @@ async function openDevTools() {
 }
 .settings-nav::-webkit-scrollbar { display: none; }
 .nav-item {
-  display: block; width: 100%; padding: 7px 10px; font-size: 11px; color: var(--text-secondary);
+  display: block; width: 100%; padding: 8px 10px; font-size: 12px; color: var(--text-secondary);
   background: none; border: none; cursor: pointer; text-align: left;
   transition: background 0.1s, color 0.1s; border-radius: 0;
 }
@@ -612,6 +972,8 @@ span.status-text { text-align: right; min-width: 50px; flex: none; }
 .cache-idx { color: var(--text-muted); width: 20px; text-align: center; flex-shrink: 0; }
 .cache-title { flex: 1; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cache-artist { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+.cache-size { color: var(--text-muted); font-size: 10px; width: 45px; text-align: right; flex-shrink: 0; font-family: 'Consolas', monospace; }
+.cache-count { font-size: 11px; color: var(--text-muted); font-weight: normal; }
 .cache-empty { padding: 12px; text-align: center; color: var(--text-muted); font-size: 11px; }
 .clear-cache-btn { margin-top: 6px; width: 100%; }
 .range-row { display: flex; align-items: center; gap: 8px; flex: 1; justify-content: flex-end; }
@@ -630,4 +992,35 @@ span.status-text { text-align: right; min-width: 50px; flex: none; }
 .path-row { display: flex; gap: 6px; align-items: center; }
 .input-path { width: 300px; flex: 1; min-width: 0; }
 
+.link {
+  color: var(--accent); text-decoration: none;
+}
+.link:hover { text-decoration: underline; }
+
+.input-with-unit {
+  display: flex; align-items: center; gap: 4px;
+}
+.unit {
+  font-size: 11px; color: var(--text-muted);
+}
+
+/* 通用 textarea */
+.textarea {
+  width: 100%; padding: 6px 8px; font-size: 11px; font-family: 'Consolas', monospace;
+  background: var(--input-bg); border: 1px solid var(--input-border);
+  color: var(--text-primary); resize: vertical; box-sizing: border-box;
+}
+.textarea:focus { border-color: var(--accent); outline: none; }
+.textarea::placeholder { color: var(--text-muted); }
+
+/* 自定义 CSS textarea */
+.css-textarea {
+  min-height: 160px; height: 160px; font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 11px; line-height: 1.5; tab-size: 2;
+}
+
+/* 致谢 */
+.thanks-text {
+  font-size: 11px; color: var(--text-secondary); line-height: 1.8; margin: 0;
+}
 </style>

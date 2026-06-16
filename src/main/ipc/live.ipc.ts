@@ -12,34 +12,74 @@ import {
 
 export function registerLiveIpc() {
   ipcMain.handle('live:get-room-info', async (_event, uid: number) => {
-    return getRoomInfoByUid(uid)
+    try {
+      return await getRoomInfoByUid(uid)
+    } catch (error: any) {
+      console.error('[live:get-room-info]', error)
+      return { success: false, error: error?.message || String(error) }
+    }
   })
 
   ipcMain.handle('live:get-room-info-by-room', async (_event, roomId: number) => {
-    return getRoomInfoByRoomId(roomId)
+    try {
+      return await getRoomInfoByRoomId(roomId)
+    } catch (error: any) {
+      console.error('[live:get-room-info-by-room]', error)
+      return { success: false, error: error?.message || String(error) }
+    }
   })
 
   ipcMain.handle('live:get-follower-count', async (_event, vmid: number) => {
-    return getFollowerCount(vmid)
+    try {
+      return await getFollowerCount(vmid)
+    } catch (error: any) {
+      console.error('[live:get-follower-count]', error)
+      return { success: false, error: error?.message || String(error) }
+    }
   })
 
   ipcMain.handle('live:update-title', async (_event, roomId: number, title: string) => {
-    return updateRoomTitle(roomId, title)
+    try {
+      return await updateRoomTitle(roomId, title)
+    } catch (error: any) {
+      console.error('[live:update-title]', error)
+      return { success: false, error: error?.message || String(error) }
+    }
   })
 
   ipcMain.handle('live:update-area', async (_event, roomId: number, areaId: number) => {
-    return updateRoomArea(roomId, areaId)
+    try {
+      return await updateRoomArea(roomId, areaId)
+    } catch (error: any) {
+      console.error('[live:update-area]', error)
+      return { success: false, error: error?.message || String(error) }
+    }
   })
 
   ipcMain.handle('live:get-area-list', async () => {
-    return getAreaList()
+    try {
+      return await getAreaList()
+    } catch (error: any) {
+      console.error('[live:get-area-list]', error)
+      return { success: false, error: error?.message || String(error) }
+    }
   })
 
   ipcMain.handle('live:start', async (_event, roomId: number, areaId: number) => {
-    return startLive(roomId, areaId)
+    try {
+      return await startLive(roomId, areaId)
+    } catch (error: any) {
+      console.error('[live:start]', error)
+      return { success: false, error: error?.message || String(error) }
+    }
   })
 
   ipcMain.handle('live:stop', async (_event, roomId: number) => {
-    return stopLive(roomId)
+    try {
+      return await stopLive(roomId)
+    } catch (error: any) {
+      console.error('[live:stop]', error)
+      return { success: false, error: error?.message || String(error) }
+    }
   })
 }

@@ -296,7 +296,9 @@ class PlaylistManager {
     }
 
     // 消费 idleQueue 队首
-    const song = this.idleQueue.shift()!
+    const song = this.idleQueue[0]
+    if (!song) return null
+    this.idleQueue.shift()
     this.fillIdleQueue()
     store.addHistory(song, 'idle', '', 0)
     store.setCacheItem(song.id, song)
@@ -386,7 +388,9 @@ class PlaylistManager {
     for (const s of picked) store.setCacheItem(s.id, s)
 
     // 第一首：display
-    const display = picked.shift()!
+    const display = picked[0]
+    if (!display) return
+    picked.shift()
     this.queue.push(display)
     this.currentIndex = 0
 

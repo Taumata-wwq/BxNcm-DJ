@@ -6,8 +6,9 @@
         </svg>
       </button>
     <div class="login-header">
-      <h1>BxNcm DJ</h1>
-      <p class="subtitle">v{{ appVersion }} by Taumata</p>
+      <h1>BxNcm DJ 
+        <span class="subtitle">v{{ appVersion }} by Taumata</span>
+      </h1>
     </div>
     <div class="login-content">
       <!-- B站 -->
@@ -95,6 +96,7 @@ const bilibiliPolling = ref(false)
 const bilibiliAvatarOk = ref(false)
 let bilibiliQrKey = ''
 let bilibiliPollTimer: ReturnType<typeof setInterval> | null = null
+let bilibiliQrTimeout: ReturnType<typeof setTimeout> | null = null
 
 // 网易云
 const neteaseQrUrl = ref('')
@@ -107,6 +109,7 @@ const neteasePolling = ref(false)
 const neteaseAvatarOk = ref(false)
 let neteaseUnikey = ''
 let neteasePollTimer: ReturnType<typeof setInterval> | null = null
+let neteaseQrTimeout: ReturnType<typeof setTimeout> | null = null
 
 const bothReady = computed(() => bilibiliLoggedIn.value && neteaseLoggedIn.value)
 
@@ -133,8 +136,10 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (bilibiliPollTimer) clearInterval(bilibiliPollTimer)
-  if (neteasePollTimer) clearInterval(neteasePollTimer)
+  if (bilibiliPollTimer) { clearInterval(bilibiliPollTimer); bilibiliPollTimer = null }
+  if (neteasePollTimer) { clearInterval(neteasePollTimer); neteasePollTimer = null }
+  if (bilibiliQrTimeout) { clearTimeout(bilibiliQrTimeout); bilibiliQrTimeout = null }
+  if (neteaseQrTimeout) { clearTimeout(neteaseQrTimeout); neteaseQrTimeout = null }
 })
 
 // ========== B站 ==========
@@ -190,7 +195,7 @@ function startBilibiliPolling() {
         bilibiliPolling.value = false
         clearInterval(bilibiliPollTimer!)
         bilibiliPollTimer = null
-        setTimeout(() => getBilibiliQR(), 1000)
+        bilibiliQrTimeout = setTimeout(() => getBilibiliQR(), 1000)
       }
     } catch (e) { console.error('[LoginView] bilibili poll failed:', e) }
   }, 2000)
@@ -254,7 +259,7 @@ function startNeteasePolling() {
         neteasePolling.value = false
         clearInterval(neteasePollTimer!)
         neteasePollTimer = null
-        setTimeout(() => getNeteaseQR(), 1000)
+        neteaseQrTimeout = setTimeout(() => getNeteaseQR(), 1000)
       }
     } catch (e) { console.error('[LoginView] netease poll failed:', e) }
   }, 2000)
@@ -295,10 +300,10 @@ function enterApp() {
 .login-card {
   background: var(--card-bg); padding: 14px; width: 280px; border: 1px solid var(--border);
 }
-.card-title { font-size: 13px; color: var(--text-primary); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--section-border); }
+.card-title { font-size: 13px; color: var(--text-primary); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--section-border); text-align: center; }
 .qr-section { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .qr-container { display: flex; flex-direction: column; align-items: center; }
-.qr-image { width: 150px; height: 150px; background: #fff; padding: 3px; border: 1px solid var(--border); }
+.qr-image { width: 150px; height: 150px; background: #fff; padding: 8px; border: 1px solid var(--border); }
 .qr-status { margin-top: 4px; font-size: 11px; color: var(--text-muted); }
 .qr-loading { font-size: 11px; color: var(--text-muted); padding: 16px 0; }
 .user-info { display: flex; flex-direction: column; align-items: center; gap: 4px; }

@@ -49,6 +49,7 @@ import { usePlayerStore } from '../../stores/player.store'
 const playerStore = usePlayerStore()
 const trackRef = ref<HTMLElement | null>(null)
 const volTrackRef = ref<HTMLElement | null>(null)
+const lastVolume = ref<number>(0)
 let seekDragging = false
 let volDragging = false
 
@@ -110,9 +111,10 @@ function applyVolume(clientX: number) {
 
 function toggleMute() {
   if (playerStore.volume > 0) {
+    lastVolume.value = playerStore.volume
     playerStore.setVolume(0)
   } else {
-    playerStore.setVolume(40)
+    playerStore.setVolume(lastVolume.value || 40)
   }
 }
 

@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, provide, computed } from 'vue'
+import { ref, provide, computed, onUnmounted, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSettingsStore } from './stores/settings.store'
 import { useAuthStore } from './stores/auth.store'
@@ -29,6 +29,14 @@ import { useAuthStore } from './stores/auth.store'
 const router = useRouter()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
+
+// ── 关闭前响应：保存设置后通知主进程 ──
+onMounted(() => {
+  window.electronAPI.onBeforeClose(async () => {
+    await settingsStore.save()
+    window.electronAPI.appSaveDone()
+  })
+})
 
 // ── 状态机 ──
 // loading      → 初始加载（设置 + 鉴权），显示 overlay
@@ -72,19 +80,25 @@ async function onLoginComplete() {
 }
 
 // MainView.onMounted 队列加载完毕后调用
+let fadeTimer: ReturnType<typeof setTimeout> | null = null
+
 function signalMainReady() {
   currentTask.value = '加载完成'
   progress.value = 100
   // 先触发 CSS 淡出动画
   fadingOut.value = true
   // 动画结束后切到 ready 状态，清理残留
-  setTimeout(() => {
+  fadeTimer = setTimeout(() => {
     fadingOut.value = false
     appPhase.value = 'ready'
     const ls = document.getElementById('loading-screen')
     if (ls) ls.remove()
   }, 400)
 }
+
+onUnmounted(() => {
+  if (fadeTimer) clearTimeout(fadeTimer)
+})
 
 // 注入给子组件
 provide('signalMainReady', signalMainReady)

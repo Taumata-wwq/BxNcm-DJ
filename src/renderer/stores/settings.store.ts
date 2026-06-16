@@ -87,29 +87,10 @@ export const useSettingsStore = defineStore('settings', () => {
   async function loadStyle() {
     try {
       const styleData = await window.electronAPI.loadStyleData()
+      if (!styleData) return
       // 样式数据暂时预留，后续启动 style 界面时使用
     } catch (e) {
       console.error('[SettingsStore] 加载样式数据失败:', e)
-    }
-  }
-
-  async function load() {
-    try {
-      const s = await window.electronAPI.getSettings()
-      loaded = false
-      if (s) {
-        settings.value = { ...DEFAULT_SETTINGS, ...s }
-      }
-      applyTheme(settings.value.theme)
-      applyAccent(settings.value.accentColor)
-      loaded = true
-
-      if (settings.value.alwaysOnTop) {
-        try { await window.electronAPI.setAlwaysOnTop(true) } catch {}
-      }
-    } catch (e) {
-      console.error('[SettingsStore] 加载设置失败:', e)
-      loaded = true
     }
   }
 
@@ -128,11 +109,22 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function applyAccent(color: string) {
+    // 验证 hex 颜色格式（支持 #RRGGBB 和 #RGB）
+    const hexMatch = color.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/)
+    if (!hexMatch) {
+      console.warn('[SettingsStore] 无效的 accent 颜色值:', color)
+      return
+    }
+    let hex = color
+    if (color.length === 4) {
+      // 展开短格式 #RGB → #RRGGBB
+      hex = '#' + color[1] + color[1] + color[2] + color[2] + color[3] + color[3]
+    }
     const root = document.documentElement
-    root.style.setProperty('--accent', color)
-    const r = parseInt(color.slice(1, 3), 16)
-    const g = parseInt(color.slice(3, 5), 16)
-    const b = parseInt(color.slice(5, 7), 16)
+    root.style.setProperty('--accent', hex)
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
     const hoverR = Math.max(0, r - 30).toString(16).padStart(2, '0')
     const hoverG = Math.max(0, g - 30).toString(16).padStart(2, '0')
     const hoverB = Math.max(0, b - 30).toString(16).padStart(2, '0')
@@ -141,9 +133,12 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function hexToRgba(hex: string, alpha: number): string {
-    const r = parseInt(hex.slice(1, 3), 16)
-    const g = parseInt(hex.slice(3, 5), 16)
-    const b = parseInt(hex.slice(5, 7), 16)
+    const h = hex.length === 4
+      ? '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3]
+      : hex
+    const r = parseInt(h.slice(1, 3), 16)
+    const g = parseInt(h.slice(3, 5), 16)
+    const b = parseInt(h.slice(5, 7), 16)
     return `rgba(${r}, ${g}, ${b}, ${alpha})`
   }
 
@@ -161,5 +156,5 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  return { settings, load, loadBoot, loadApp, loadStyle, save, toggleTheme, setAccentColor }
+  return { settings, loadBoot, loadApp, loadStyle, save, toggleTheme, setAccentColor }
 })

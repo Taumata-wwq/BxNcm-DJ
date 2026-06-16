@@ -100,7 +100,7 @@ async function tryListen(port: number): Promise<number> {
       resolve(port)
     })
     server!.on('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'EADDRINUSE' && port < 4690) {
+      if (err.code === 'EADDRINUSE' && port < 4710) {
         resolve(tryListen(port + 1))
       } else {
         reject(err)

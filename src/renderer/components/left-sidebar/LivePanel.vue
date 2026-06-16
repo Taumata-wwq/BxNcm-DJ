@@ -9,8 +9,6 @@ const settingsStore = useSettingsStore()
 interface AreaItem { id: number; name: string; subs: { id: number; name: string }[] }
 interface StreamInfo {
   rtmp: { addr: string; code: string }
-  rtmp2: { addr: string; code: string }
-  srt: { addr: string; code: string }
 }
 
 const loading = ref(false)
@@ -26,7 +24,6 @@ const parentAreaIdx = ref(settingsStore.settings.liveParentAreaIdx)
 const subAreaId = ref<number | null>(settingsStore.settings.liveSubAreaId || null)
 const isLive = ref(false)
 
-const protocol = ref<'rtmp' | 'rtmp2' | 'srt'>('rtmp')
 const streamData = ref<StreamInfo | null>(null)
 
 let autoFetched = false
@@ -86,7 +83,7 @@ function handleClickOutside(e: MouseEvent) {
 
 function addLog(msg: string) {
   log.value.push(`[${new Date().toLocaleTimeString()}] ${msg}`)
-  if (log.value.length > 50) log.value = log.value.slice(-30)
+  if (log.value.length > 50) log.value = log.value.slice(-50)
   nextTick(() => {
     const el = document.querySelector('.live-log-list')
     if (el) el.scrollTop = el.scrollHeight
@@ -207,9 +204,11 @@ async function saveTitle() {
   finally { busy.value = false }
 }
 
-// 回车自动保存标题
+// 回车自动保存标题（仅内容变化时）
 function onTitleEnter() {
-  saveTitle()
+  if (titleInput.value !== roomInfo.value?.title) {
+    saveTitle()
+  }
 }
 
 // 失焦自动保存标题（仅内容变化时）
@@ -239,8 +238,6 @@ async function handleStartLive() {
     if (streamInfo) {
       streamData.value = {
         rtmp: { addr: streamInfo.rtmp?.addr || '', code: streamInfo.rtmp?.code || '' },
-        rtmp2: { addr: streamInfo.rtmp2?.addr || '', code: streamInfo.rtmp2?.code || '' },
-        srt: { addr: streamInfo.srt?.addr || '', code: streamInfo.srt?.code || '' },
       }
       addLog('开播成功！推流码已获取')
     } else {
@@ -262,7 +259,8 @@ async function handleStopLive() {
   finally { busy.value = false }
 }
 
-const curStream = computed(() => streamData.value?.[protocol.value])
+// 当前推流信息
+const curStream = computed(() => streamData.value?.rtmp)
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
@@ -365,15 +363,6 @@ onUnmounted(() => {
       <div v-if="streamData" class="live-stream">
         <div class="live-stream-header">
           <span class="live-stream-title">推流信息</span>
-          <div class="live-protocol-tabs">
-            <button
-              v-for="p in (['rtmp', 'rtmp2', 'srt'] as const)"
-              :key="p"
-              class="live-proto-btn"
-              :class="{ active: protocol === p }"
-              @click="protocol = p"
-            >{{ p.toUpperCase() }}</button>
-          </div>
         </div>
 
         <div class="live-stream-item">
@@ -521,13 +510,6 @@ onUnmounted(() => {
   padding: 6px 10px 4px;
 }
 .live-stream-title { font-size: 11px; font-weight: 600; color: var(--text-primary); }
-.live-protocol-tabs { display: flex; gap: 1px; background: var(--bg-tertiary); padding: 1px; }
-.live-proto-btn {
-  padding: 2px 6px; font-size: 10px; border: none; border-radius: 0;
-  background: none; color: var(--text-muted); cursor: pointer;
-}
-.live-proto-btn:hover { color: var(--text-primary); }
-.live-proto-btn.active { background: var(--accent); color: #fff; }
 
 .live-stream-item { display: flex; flex-direction: column; gap: 2px; padding: 0 10px 6px; }
 .live-stream-label { font-size: 10px; color: var(--text-muted); }

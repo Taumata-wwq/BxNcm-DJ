@@ -19,7 +19,6 @@ interface ElectronAPI {
   getUserEmoticons: () => Promise<{ code: number; message: string; packages: any[] }>
   getAllEmoticons: () => Promise<{ code: number; message: string; packages: any[] }>
   onDanmakuStatusChanged: (cb: (status: import('@shared/types/danmaku').DanmakuStatus) => void) => void
-  onDanmakuMessage: (cb: (msg: import('@shared/types/danmaku').DanmakuMessage) => void) => void
   onDanmakuViewerJoin: (cb: (viewer: import('@shared/types/danmaku').ViewerInfo) => void) => void
   playerPlay: (songId: string) => Promise<void>
   playerPause: () => Promise<void>
@@ -95,6 +94,13 @@ interface ElectronAPI {
   liveStop: (roomId: number) => Promise<any>
   getLiveArea: () => Promise<{ parentAreaIdx: number; subAreaId: number } | null>
   setLiveArea: (parentAreaIdx: number, subAreaId: number) => Promise<{ success: boolean }>
+  // blivechat 身份码
+  fetchIdentityCode: () => Promise<{ success: boolean; code?: string; message?: string }>
+  // blivechat CSS 注入（通过主进程在子 frame 中执行 JavaScript）
+  injectCssToBlivechatFrame: (css: string) => Promise<{ success: boolean; error?: string }>
+  // 表情包图片缓存
+  cacheEmoticonImages: (packages: any[]) => Promise<{ success: boolean; urlMap: Record<string, string> }>
+  clearEmoticonCache: () => Promise<{ success: boolean }>
   // OBS 叠加层 - 广播数据
   obsBroadcastLyric: (text: string, translation: string) => void
   obsBroadcastQueue: (songs: Array<{ index: number; title: string; artist: string; requesterName: string }>, currentIndex: number) => void
@@ -103,6 +109,9 @@ interface ElectronAPI {
   getObsPort: () => Promise<number>
   toggleObsOverlay: (enabled: boolean) => Promise<{ port: number; error?: string }>
   startObsIfEnabled: () => Promise<{ port: number; error?: string }>
+  getAudioCacheList: () => Promise<any[]>
+  clearAudioCache: () => Promise<void>
+  prefetchQueueOnStartup: () => Promise<void>
 }
 interface Window {
   electronAPI: ElectronAPI

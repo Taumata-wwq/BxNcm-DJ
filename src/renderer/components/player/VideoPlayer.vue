@@ -21,13 +21,13 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { usePlayerStore } from '../../stores/player.store'
+import { volumeToAmplitude } from '../../../shared/utils/audio'
 
 const playerStore = usePlayerStore()
 const videoEl = ref<HTMLVideoElement | null>(null)
 const videoUrl = ref('')
 const retrying = ref(false)
 let retryTimer: ReturnType<typeof setTimeout> | null = null
-let endedTimer: ReturnType<typeof setTimeout> | null = null
 let errorCount = 0       // 当前视频的错误次数
 let loadAttemptId = 0    // 递增ID，防止 stale callback
 let lastEndedTime = 0    // 防止同一首歌重复触发 playerEnded
@@ -38,10 +38,10 @@ function setVideoRef(el: any) {
   videoEl.value = el instanceof HTMLVideoElement ? el : null
 }
 
-// 监听音量变化
+// 监听音量变化（感知线性化）
 watch(() => playerStore.volume, (vol) => {
   if (videoEl.value) {
-    videoEl.value.volume = vol / 100
+    videoEl.value.volume = volumeToAmplitude(vol)
   }
 })
 
@@ -96,7 +96,6 @@ onUnmounted(() => {
 
 function cleanupVideo() {
   if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
-  if (endedTimer) { clearTimeout(endedTimer); endedTimer = null }
   if (videoEl.value) {
     videoEl.value.pause()
     videoEl.value.removeAttribute('src')
@@ -108,7 +107,8 @@ function onLoaded() {
   if (videoEl.value && playerStore.currentSong) {
     playerStore.duration = videoEl.value.duration
     lastDuration = videoEl.value.duration
-    videoEl.value.volume = playerStore.volume / 100
+    // 初始化音量：感知线性化
+    videoEl.value.volume = volumeToAmplitude(playerStore.volume)
   }
   retrying.value = false
   errorCount = 0

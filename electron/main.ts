@@ -1,5 +1,4 @@
 import { app, BrowserWindow, shell, ipcMain } from 'electron'
-import { release } from 'os'
 import { join } from 'path'
 import { store } from '../src/main/services/store'
 import { stopObsServer } from '../src/main/services/obs'
@@ -14,10 +13,10 @@ process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(process.env.DIST, 
 
 let mainWindow: BrowserWindow | null = null
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
-const isDev = process.env.NODE_ENV === 'development'
 
 // 关闭流程状态：防止竞态条件导致数据丢失
 let isQuitting = false
+let isRelaunching = false
 const QUIT_TIMEOUT = 5000  // 渲染进程无响应时的超时保护
 
 function getThemeBgColor(): string {
@@ -41,7 +40,7 @@ function loadWindowOptions() {
       preload: join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: !isDev
+      webSecurity: false
     }
   }
 
@@ -83,7 +82,7 @@ function createWindow() {
   //   4. 等待渲染进程完成保存后发送 app:save-done
   //   5. 收到后 flush 并退出；超时则强制退出
   mainWindow.on('close', (e) => {
-    if (isQuitting) return  // 已进入退出流程，允许直接关闭
+    if (isQuitting || isRelaunching) return  // 已进入退出/重启流程，允许直接关闭
     e.preventDefault()
     if (mainWindow) {
       const [x, y] = mainWindow.getPosition()
@@ -92,7 +91,7 @@ function createWindow() {
       mainWindow.webContents.send('app:before-close')
     }
     // 超时保护：渲染进程崩溃或无响应时强制退出
-    setTimeout(() => {
+    const quitTimer = setTimeout(() => {
       if (!isQuitting) {
         console.warn('[Main] 渲染进程未在超时前完成保存，强制退出')
         isQuitting = true
@@ -101,6 +100,8 @@ function createWindow() {
         app.exit(0)
       }
     }, QUIT_TIMEOUT)
+    // 正常退出时清除超时定时器
+    mainWindow?.once('closed', () => clearTimeout(quitTimer))
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -112,6 +113,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  store.init()
   // 注册关闭流程监听器：渲染进程保存完成后通知主进程退出
   ipcMain.on('app:save-done', () => {
     if (!isQuitting) {
@@ -120,6 +122,16 @@ app.whenReady().then(() => {
       stopObsServer()
       app.quit()
     }
+  })
+
+  // 重启应用：app.relaunch() 在 dev/prod 模式下均可用，配合 app.quit() 优雅退出
+  // 不直接 exit(0)，避免杀死 dev server 进程树
+  ipcMain.handle('app:relaunch', () => {
+    store.set('window_position', '')
+    store.flush()
+    isRelaunching = true
+    app.relaunch()
+    app.quit()
   })
 
   createWindow()
@@ -133,7 +145,6 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   store.flush()
   stopObsServer()
-  if (release().startsWith('6.1')) app.quit()
   app.quit()
 })
 

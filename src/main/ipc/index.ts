@@ -1,11 +1,11 @@
-import { BrowserWindow, ipcMain, app, screen } from 'electron'
+import { BrowserWindow, ipcMain, screen } from 'electron'
 import { registerDanmakuIpc } from './danmaku.ipc'
 import { registerPlayerIpc } from './player.ipc'
 import { registerPlaylistIpc } from './playlist.ipc'
 import { registerAuthIpc } from './auth.ipc'
 import { registerSettingsIpc } from './settings.ipc'
 import { registerLiveIpc } from './live.ipc'
-import { broadcastObsData, startObsServer, stopObsServer, getObsServerPort } from '../services/obs'
+import { broadcastObsData, startObsServer, stopObsServer } from '../services/obs'
 import { store } from '../services/store'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow) {
@@ -36,18 +36,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
     return flag
   })
   ipcMain.handle('window:is-resizable', () => mainWindow.isResizable())
-
-  // 重启应用
-  ipcMain.handle('app:relaunch', () => {
-    if (!app.isPackaged) {
-      // 开发模式：仅 reload 当前渲染进程
-      mainWindow.reload()
-    } else {
-      // 打包模式：完整 relaunch
-      app.relaunch()
-      app.exit(0)
-    }
-  })
 
   // 打开 OBS 样式设置窗口（独立窗口，位置/大小持久化）
   ipcMain.handle('window:open-style', (_event, port: number) => {

@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { playlistManager } from '../services/player/playlist-manager'
 import { neteaseApi } from '../services/music/netease-api'
 import { bilibiliAuth } from '../services/music/bilibili-video'
+import { audioCache } from '../services/player/audio-cache'
 import type { SongItem } from '../../shared/types/song'
 
 // 重入保护：防止 player:ended / player:next 被并发调用导致跳歌
@@ -44,18 +45,37 @@ async function fetchSongUrl(song: SongItem): Promise<boolean> {
 }
 
 /**
- * 预缓存下 N 首歌曲的播放 URL
+ * 预缓存下 N 首歌曲的播放 URL，并下载音频文件到本地缓存
+ * 直接遍历队列中非空闲歌曲（有序号部分），从当前播放位置之后取
  */
-async function prefetchNextSongs(win: BrowserWindow, count: number = 3) {
-  const nextSongs = playlistManager.peekNext(count)
-  for (const song of nextSongs) {
+export async function prefetchNextSongs(win: BrowserWindow, count: number = 3) {
+  const queue = playlistManager.getQueue()
+  const currentIdx = playlistManager.getCurrentIndex()
+  const idleStartIdx = playlistManager.getIdleQueueStartIndex()
+
+  // 从 currentIndex+1 开始，只取非空闲歌曲（有序号部分），最多 count 首
+  const toDownload: SongItem[] = []
+  for (let i = currentIdx + 1; i < idleStartIdx && toDownload.length < count; i++) {
+    const song = queue[i]
+    if (song && !audioCache.has(song.id)) {
+      toDownload.push(song)
+    }
+  }
+  if (toDownload.length === 0) return
+
+  for (const song of toDownload) {
     if (!song.playUrl || (song.playUrlExpire && Date.now() > song.playUrlExpire)) {
       try {
         await fetchSongUrl(song)
       } catch (e) {
         console.error('[PlayerIPC] 预缓存歌曲URL失败:', (e as Error).message)
-        // 预缓存失败不影响当前播放
+        continue
       }
+    }
+    if (song.playUrl) {
+      audioCache.download(song).catch(e => {
+        console.error('[PlayerIPC] 预缓存下载失败:', (e as Error).message)
+      })
     }
   }
 }
@@ -68,18 +88,21 @@ async function prefetchNextSongs(win: BrowserWindow, count: number = 3) {
 export async function sendPlayEvent(win: BrowserWindow, song: SongItem): Promise<boolean> {
   let hasUrl = false
 
-  if (song.source === 'netease') {
-    hasUrl = await fetchSongUrl(song)
-    // 获取歌词
-    try {
-      const lyric = await neteaseApi.getLyric(song.sourceId)
-      if (lyric.length > 0) {
-        win.webContents.send('player:lyric-update', lyric)
-      }
-    } catch (e) {
-      console.error('[PlayerIPC] 获取歌词失败:', (e as Error).message)
+  // 先检查本地缓存：命中则直接用本地文件（音频 + 封面）
+  const localUrl = audioCache.getFileUrl(song.id)
+  if (localUrl) {
+    song.playUrl = localUrl
+    hasUrl = true
+    // 封面也使用本地缓存
+    const localCover = audioCache.getCoverUrl(song.id)
+    if (localCover) {
+      song.coverUrl = localCover
     }
-  } else if (song.source === 'bilibili') {
+  }
+
+  if (!hasUrl && song.source === 'netease') {
+    hasUrl = await fetchSongUrl(song)
+  } else if (!hasUrl && song.source === 'bilibili') {
     // B站视频：更激进的重试策略（最多 3 次，延迟递增）
     let retries = 0
     const maxRetries = 2  // 共 3 次尝试（含首次）
@@ -88,7 +111,6 @@ export async function sendPlayEvent(win: BrowserWindow, song: SongItem): Promise
         const delay = 1500 * retries  // 1.5s, 3s
         console.warn(`[PlayerIPC] B站视频 ${song.title} 第${retries + 1}次尝试获取URL，${delay}ms后重试...`)
         await new Promise(r => setTimeout(r, delay))
-        // 重试前清空可能变质的缓存 CID
         song.cid = 0
       }
       hasUrl = await fetchSongUrl(song)
@@ -99,18 +121,30 @@ export async function sendPlayEvent(win: BrowserWindow, song: SongItem): Promise
     }
   }
 
-  // URL 获取失败：不发送播放事件，避免 VideoPlayer 加载空 URL 后触发 error→跳过
+  // URL 获取失败：不发送播放事件
   if (!hasUrl) {
     console.error(`[PlayerIPC] ${song.source === 'bilibili' ? 'B站视频' : '网易云音乐'} "${song.title}" URL获取失败，跳过`)
     return false
   }
 
-  // 先发送 state-changed 触发 Vue 挂载对应播放器组件（audio→video 切换时 VideoPlayer 尚未挂载）
+  // 获取歌词（netease，即使缓存命中也需要）
+  if (song.source === 'netease') {
+    try {
+      const lyric = await neteaseApi.getLyric(song.sourceId)
+      if (lyric.length > 0) {
+        win.webContents.send('player:lyric-update', lyric)
+      }
+    } catch (e) {
+      console.error('[PlayerIPC] 获取歌词失败:', (e as Error).message)
+    }
+  }
+
+  // 先发送 state-changed 触发 Vue 挂载对应播放器组件
   win.webContents.send('player:state-changed', {
     currentSong: song,
     playerType: song.source === 'bilibili' ? 'video' : 'audio'
   })
-  // 再发送 play-url，此时正确的播放器组件已准备好接收
+  // 再发送 play-url
   win.webContents.send('player:play-url', {
     song,
     playing: true,
@@ -120,9 +154,17 @@ export async function sendPlayEvent(win: BrowserWindow, song: SongItem): Promise
   // 日志：播放信息
   const srcTag = song.source === 'bilibili' ? '[B站]' : '[网易云]'
   const requester = song.requesterName ? ` ${song.requesterName} 点播` : ''
-  win.webContents.send('log:add', `${srcTag} 正在播放: ${song.title} - ${song.artist}${requester}`)
+  const cacheTag = song.playUrl?.startsWith('file://') ? ' [本地缓存]' : ''
+  win.webContents.send('log:add', `${srcTag} 正在播放: ${song.title} - ${song.artist}${requester}${cacheTag}`)
 
-  // 预缓存后续歌曲
+  // 后台下载当前播放歌曲到本地缓存（未缓存 + 有URL 即可）
+  if (!localUrl && song.playUrl) {
+    audioCache.download(song).catch(e => {
+      console.error('[PlayerIPC] 当前歌曲缓存失败:', (e as Error).message)
+    })
+  }
+
+  // 预缓存后续歌曲 URL + 下载音频
   prefetchNextSongs(win, 3)
 
   return true
@@ -243,5 +285,55 @@ export function registerPlayerIpc(mainWindow: BrowserWindow) {
     } finally {
       processingEnded = false
     }
+  })
+
+  // ==================== 音频文件缓存 ====================
+
+  /** 获取音频缓存文件列表 */
+  ipcMain.handle('audio-cache:list', () => {
+    return audioCache.getCacheList()
+  })
+
+  /** 清空音频缓存（不进回收站） */
+  ipcMain.handle('audio-cache:clear', () => {
+    audioCache.clearAll()
+    return { success: true }
+  })
+
+  /** 预缓存指定歌曲的音频文件 */
+  ipcMain.handle('audio-cache:prefetch', async (_, songIds: string[]) => {
+    const queue = playlistManager.getQueue()
+    const songs = queue.filter(s => songIds.includes(s.id))
+    if (songs.length === 0) return { success: false, reason: 'no_songs' }
+    audioCache.prefetch(songs).catch(e => {
+      console.error('[PlayerIPC] 手动预缓存失败:', (e as Error).message)
+    })
+    return { success: true }
+  })
+
+  /** 启动时批量预缓存队列中所有非空闲歌曲（有序号部分） */
+  ipcMain.handle('audio-cache:prefetch-queue', async () => {
+    const queue = playlistManager.getQueue()
+    const idleStartIdx = playlistManager.getIdleQueueStartIndex()
+    const toDownload = queue.slice(0, idleStartIdx).filter(s => !audioCache.has(s.id))
+    if (toDownload.length === 0) return { success: true, count: 0 }
+
+    console.log(`[PlayerIPC] 启动预缓存: 共 ${toDownload.length} 首`)
+    for (const song of toDownload) {
+      if (!song.playUrl || (song.playUrlExpire && Date.now() > song.playUrlExpire)) {
+        try {
+          await fetchSongUrl(song)
+        } catch (e) {
+          console.error(`[PlayerIPC] 启动预缓存 URL 获取失败: ${song.title}`, (e as Error).message)
+          continue
+        }
+      }
+      if (song.playUrl) {
+        audioCache.download(song).catch(e => {
+          console.error(`[PlayerIPC] 启动预缓存下载失败: ${song.title}`, (e as Error).message)
+        })
+      }
+    }
+    return { success: true, count: toDownload.length }
   })
 }

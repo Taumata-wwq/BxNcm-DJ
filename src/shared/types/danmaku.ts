@@ -16,6 +16,12 @@ export interface DanmakuMessage {
   text?: string
   avatarUrl?: string
   emoticonUrl?: string
+  /** 表情实际宽度（来自 info[0][13].width） */
+  emoticonWidth?: number
+  /** 表情实际高度（来自 info[0][13].height） */
+  emoticonHeight?: number
+  /** 弹幕类型：0=文本, 1=表情, 2=语音（来自 info[0][12]） */
+  dm_type?: number
   medal?: { name: string; level: number }
   gift_name?: string
   gift_icon_url?: string
@@ -28,6 +34,8 @@ export interface DanmakuMessage {
   timestamp?: number
   /** 用户特权类型：0=无, 1=舰长, 2=提督, 3=总督 */
   privilege_type?: number
+  /** 作者类型（对齐 blivechat-dev）：0=普通, 1=舰队, 2=房管, 3=主播 */
+  authorType?: number
   /** 连续重复次数（渲染层折叠用，1=不重复） */
   repeat?: number
 }

@@ -79,7 +79,7 @@ export const neteaseAuth = {
         // 从响应 cookie 中提取登录凭证
         const cookies = result.cookie
         const cookieStr = Object.entries(cookies)
-          .filter(([k]) => !k.startsWith('_') && k !== 'Path' && k !== 'Domain' && k !== 'Expires')
+          .filter(([k]) => k !== '__cookie_str__')
           .map(([k, v]) => `${k}=${v}`)
           .join('; ')
 

@@ -2,6 +2,8 @@ import { ipcMain } from 'electron'
 import { store } from '../services/store'
 import { DEFAULT_SETTINGS } from '../../shared/constants/defaults'
 import { broadcastObsData, getObsServerPort } from '../services/obs'
+import { audioCache } from '../services/player/audio-cache'
+import { emoticonCache } from '../services/emoticon-cache'
 
 const APP_PREFIX = 'app_'
 const OLD_SETTINGS_KEY = 'app_settings'
@@ -120,9 +122,11 @@ export function registerSettingsIpc() {
     }
   })
 
-  ipcMain.handle('store:reset-data', () => {
+  ipcMain.handle('store:reset-data', async () => {
     try {
       store.resetAllData()
+      audioCache.clearAll()
+      emoticonCache.clearAll()
       return { success: true }
     } catch (e) {
       console.error('[SettingsIPC] 重置数据失败:', (e as Error).message)

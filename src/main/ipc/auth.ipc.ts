@@ -3,6 +3,7 @@ import { autoLogin } from '../services/auto-login'
 import { bilibiliAuth, getBilibiliCookieStr } from '../services/music/bilibili-video'
 import { neteaseAuth } from '../services/music/netease-auth'
 import { store } from '../services/store'
+import { fetchWithTimeout } from '../utils/fetch'
 
 function getBilibiliState() {
   return {
@@ -20,6 +21,21 @@ function getNeteaseState() {
     neteaseFace: store.get('netease_face') || '',
     neteaseUid: parseInt(store.get('netease_uid') || '0', 10)
   }
+}
+
+/** 从 cookie 字符串中提取 bili_jct 的值 */
+function extractBiliJct(cookieStr: string): string {
+  if (!cookieStr) return ''
+  for (const part of cookieStr.split(';')) {
+    const trimmed = part.trim()
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx <= 0) continue
+    const key = trimmed.substring(0, eqIdx).trim()
+    if (key === 'bili_jct') {
+      return trimmed.substring(eqIdx + 1).trim()
+    }
+  }
+  return ''
 }
 
 export function registerAuthIpc(mainWindow: BrowserWindow) {
@@ -93,5 +109,43 @@ export function registerAuthIpc(mainWindow: BrowserWindow) {
       ...getBilibiliState(),
       netease: false, neteaseUname: '', neteaseFace: '', neteaseUid: 0
     })
+  })
+
+  // 获取 blivechat 身份码（直播间推广码）
+  // 参考: https://programmerall.com/article/19972716529/
+  // POST body 需要: action=1&csrf_token={bili_jct}&csrf={bili_jct}
+  ipcMain.handle('auth:fetch-identity-code', async () => {
+    const cookieStr = getBilibiliCookieStr()
+    if (!cookieStr) {
+      return { success: false, message: '未登录B站' }
+    }
+    // 从 cookie 中提取 bili_jct 作为 CSRF token
+    const csrfToken = extractBiliJct(cookieStr)
+    if (!csrfToken) {
+      return { success: false, message: 'Cookie 中缺少 bili_jct，请重新登录B站' }
+    }
+    try {
+      const body = `action=1&csrf_token=${encodeURIComponent(csrfToken)}&csrf=${encodeURIComponent(csrfToken)}`
+      const res = await fetchWithTimeout('https://api.live.bilibili.com/xlive/open-platform/v1/common/operationOnBroadcastCode', {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Cookie': cookieStr,
+          'Origin': 'https://link.bilibili.com',
+          'Referer': 'https://link.bilibili.com/p/center/index',
+        },
+        body
+      })
+      const data = await res.json()
+      if (data.code === 0 && data.data?.code) {
+        return { success: true, code: data.data.code }
+      } else {
+        return { success: false, message: data.message || '获取失败' }
+      }
+    } catch (e) {
+      console.error('[AuthIPC] 获取身份码失败:', (e as Error).message)
+      return { success: false, message: (e as Error).message }
+    }
   })
 }

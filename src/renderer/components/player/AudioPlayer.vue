@@ -14,6 +14,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, nextTick } from 'vue'
 import { usePlayerStore } from '../../stores/player.store'
+import { volumeToAmplitude } from '../../../shared/utils/audio'
 
 const playerStore = usePlayerStore()
 const audioEl = ref<HTMLAudioElement | null>(null)
@@ -30,10 +31,10 @@ function cancelFade() {
   if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null }
 }
 
-/** 音量淡入：从 0 渐变到目标音量 */
+/** 音量淡入：从 0 渐变到感知线性化的目标音量 */
 function fadeIn(el: HTMLAudioElement) {
   cancelFade()
-  const target = playerStore.volume / 100
+  const target = volumeToAmplitude(playerStore.volume)
   el.volume = 0
   el.muted = false
   const step = target / 15  // ~300ms at 20ms intervals
@@ -69,10 +70,10 @@ function fadeOutAndPause(el: HTMLAudioElement) {
   }, 20)
 }
 
-// 监听音量变化
+// 监听音量变化（感知线性化）
 watch(() => playerStore.volume, (vol) => {
   if (audioEl.value) {
-    audioEl.value.volume = vol / 100
+    audioEl.value.volume = volumeToAmplitude(vol)
   }
 })
 
@@ -131,8 +132,8 @@ function onLoaded() {
   if (audioEl.value && playerStore.currentSong) {
     playerStore.duration = audioEl.value.duration
     lastDuration = audioEl.value.duration
-    // 初始化音量：确保默认40%真正应用到播放器
-    audioEl.value.volume = playerStore.volume / 100
+    // 初始化音量：确保默认值真正应用到播放器（感知线性化）
+    audioEl.value.volume = volumeToAmplitude(playerStore.volume)
   }
   lastTimeUpdate = 0
 }

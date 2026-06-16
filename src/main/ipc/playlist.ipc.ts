@@ -3,7 +3,7 @@ import { playlistManager } from '../services/player/playlist-manager'
 import { neteaseApi } from '../services/music/netease-api'
 import { bilibiliAuth } from '../services/music/bilibili-video'
 import { store } from '../services/store'
-import { sendPlayEvent } from './player.ipc'
+import { sendPlayEvent, prefetchNextSongs } from './player.ipc'
 import type { SongItem } from '../../shared/types/song'
 
 function notifyQueueUpdate(win: BrowserWindow) {
@@ -78,7 +78,6 @@ async function preloadFirstSong(win: BrowserWindow): Promise<void> {
         win.webContents.send('player:play-url', {
           song: first, playing: false, playerType: 'video'
         })
-        win.webContents.send('player:pause')
       }
     } catch (e) {
       console.error('[preloadFirstSong] B站预取失败:', (e as Error).message)
@@ -132,7 +131,10 @@ export function registerPlaylistIpc(mainWindow: BrowserWindow) {
 
   ipcMain.handle('playlist:add-song', (_, song: any) => {
     const ok = playlistManager.addToQueue(song)
-    if (ok) notifyQueueUpdate(mainWindow)
+    if (ok) {
+      notifyQueueUpdate(mainWindow)
+      prefetchNextSongs(mainWindow, 3)
+    }
     return { success: ok }
   })
 
@@ -140,6 +142,7 @@ export function registerPlaylistIpc(mainWindow: BrowserWindow) {
     playlistManager.insertTop(song)
     notifyQueueUpdate(mainWindow)
     mainWindow.webContents.send('log:add', `${song.requesterName || '控制台'} 点歌: ${song.title}`)
+    prefetchNextSongs(mainWindow, 3)
     return { success: true }
   })
 
@@ -152,6 +155,7 @@ export function registerPlaylistIpc(mainWindow: BrowserWindow) {
 
   ipcMain.handle('favorite:remove', (_, songId: string) => {
     store.removeFavorite(songId)
+    return { success: true }
   })
 
   ipcMain.handle('favorite:get', () => {

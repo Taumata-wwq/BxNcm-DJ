@@ -8,15 +8,15 @@ import { bilibiliAuth } from '../music/bilibili-video'
 import { getDanmuServerInfo, type DanmuServerInfo } from '../../utils/wbi'
 import { getOnlineRank } from '../live-manager'
 import { fetchWithTimeout } from '../../utils/fetch'
-import type { DanmakuStatus, ParsedSongRequest, DanmakuMessage } from '../../../shared/types/danmaku'
+import type { DanmakuStatus, ParsedSongRequest } from '../../../shared/types/danmaku'
 import type { SongItem } from '../../../shared/types/song'
 
 
-// 点歌指令正则
-const NETEASE_PATTERN = /^点歌\s*[:：]?\s*(.+?)(?:\s+|\s*[-—–]\s*)(.+?)$/      // "点歌 歌名 歌手"
-const NETEASE_PATTERN_SIMPLE = /^点歌\s*[:：]?\s*(.{2,}?)$/                    // "点歌 歌名"（仅歌名，至少2字符）
-const NETEASE_ID_PATTERN = /^点歌\s*[:：]?\s*(\d{4,})$/                        // "点歌 123456"（歌曲ID）
-const BILI_PATTERN = /^点歌\s*[:：]?\s*(BV[\w]{10})/i                          // "点歌 BV..."
+// 点歌指令正则 — 必须 "点歌/點歌" + 空格 + 歌曲信息，没有空格则筛掉
+const NETEASE_PATTERN = /^[点點]歌\s+(.+?)(?:\s+|\s*[-—–]\s*)(.+?)$/      // "点歌/點歌 歌名 歌手"
+const NETEASE_PATTERN_SIMPLE = /^[点點]歌\s+(.{2,}?)$/                    // "点歌/點歌 歌名"（仅歌名，至少2字符）
+const NETEASE_ID_PATTERN = /^[点點]歌\s+(\d{4,})$/                        // "点歌/點歌 123456"（歌曲ID）
+const BILI_PATTERN = /^[点點]歌\s+(BV[\w]{10})/i                          // "点歌/點歌 BV..."
 
 interface HostInfo { host: string; wss_port: number; ws_port: number }
 
@@ -36,11 +36,11 @@ export class LiveWS {
   private retryCount = 0
   private maxRetries = 20
   private anchorUid = 0
-  private initialViewersFetched = false
+  private roomOwnerUid = 0
+  private viewerPollTimer: NodeJS.Timeout | null = null
 
   onStatusChange: ((status: DanmakuStatus) => void) | null = null
   onSongRequest: ((req: { song: SongItem; requesterName: string; requesterUid: number }) => void) | null = null
-  onDanmakuMessage: ((msg: DanmakuMessage) => void) | null = null
   onViewerJoin: ((viewer: { uid: number; uname: string; avatarUrl: string }) => void) | null = null
 
   constructor(roomId: number, uid: number = 0) {
@@ -99,7 +99,6 @@ export class LiveWS {
   private onOpen() {
     this.retryCount = 0
     this.hostIndex = 0
-    this.initialViewersFetched = false
     // 发送鉴权包 (参考 Bilibili-Live-API-master)
     const authPayload = JSON.stringify({
       uid: this.uid,
@@ -160,6 +159,7 @@ export class LiveWS {
   disconnect() {
     this.intentionalClose = true
     this.stopHeartbeat()
+    this.stopViewerPolling()
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null }
     this.ws?.close()
     this.ws = null
@@ -202,8 +202,8 @@ export class LiveWS {
         if (packet.op === 8) {
           // 鉴权成功
           this.retryCount = 0
-          // 连接成功后拉取在线观众榜
-          this.fetchInitialViewers()
+          // 连接成功后拉取在线观众，并启动定期轮询
+          this.fetchAndPollViewers()
         } else if (packet.op === 3) {
           // 心跳响应 (人气值)
         } else if (packet.op === 5) {
@@ -255,6 +255,9 @@ export class LiveWS {
   // ======== 点歌处理 + 弹幕/礼物消息转发 ========
   private cmdLogCounts = new Map<string, number>()
   private handleMessages(bodies: any[]) {
+    console.log('[LiveWS] 收到消息, bodies count:', bodies.length,
+      'first cmd:', bodies[0]?.cmd || '(none)',
+      'this.msgCount:', this.msgCount)
     for (const body of bodies) {
       if (!body || !body.cmd) continue
 
@@ -271,119 +274,36 @@ export class LiveWS {
       // 弹幕聚合（相同内容合并展示）
       if (cmd.startsWith('DANMU_AGGREGATION')) {
         const data = body.data
-        if (data && this.onDanmakuMessage) {
-          this.onDanmakuMessage({
-            type: 'danmaku',
-            uid: data.uid || 0,
-            uname: data.uname || '',
-            text: data.msg || data.text || '',
-            num: data.aggregation_num || 1,
-          })
+        if (data) {
+          // 弹幕聚合消息，仅日志记录
+          console.log('[LiveWS] DANMU_AGGREGATION:', data.aggregation_num, '条', data.msg?.slice(0, 30))
         }
         continue
       }
 
       // 弹幕互动（连击等）
       if (cmd.startsWith('DM_INTERACTION')) {
-        const data = body.data
-        if (data && this.onDanmakuMessage) {
-          this.onDanmakuMessage({
-            type: 'danmaku',
-            uid: data.uid || 0,
-            uname: data.uname || '',
-            text: data.msg || '',
-          })
-        }
+        // 弹幕互动仅内部消费，不再转发到渲染进程（blivechat 自行处理）
         continue
       }
 
-      // 礼物
+      // 礼物 - blivechat 自行处理渲染
       if (cmd.startsWith('SEND_GIFT')) {
-        const data = body.data
-        if (data && this.onDanmakuMessage) {
-          // 提取勋章
-          const medalInfo = data.medal_info
-          const medal = medalInfo?.medal_name
-            ? { name: String(medalInfo.medal_name), level: Number(medalInfo.medal_level || 0) }
-            : undefined
-
-          this.onDanmakuMessage({
-            type: 'gift',
-            uid: data.uid || 0,
-            uname: data.uname || '',
-            avatarUrl: data.face || '',
-            gift_name: data.giftName || '',
-            gift_icon_url: data.gift_info?.img_basic || '',
-            num: data.num || 0,
-            medal,
-            privilege_type: data.guard_level || 0,
-          })
-        }
         continue
       }
 
-      // 连击礼物
+      // 连击礼物 - blivechat 自行处理渲染
       if (cmd.startsWith('COMBO_SEND')) {
-        const data = body.data
-        if (data && this.onDanmakuMessage) {
-          const medalInfo = data.medal_info
-          const medal = medalInfo?.medal_name
-            ? { name: String(medalInfo.medal_name), level: Number(medalInfo.medal_level || 0) }
-            : undefined
-
-          this.onDanmakuMessage({
-            type: 'combo_gift',
-            uid: data.uid || 0,
-            uname: data.uname || '',
-            avatarUrl: data.face || '',
-            gift_name: data.gift_name || '',
-            gift_icon_url: data.gift_info?.img_basic || '',
-            combo_num: data.combo_num || 0,
-            total_num: data.total_num || 0,
-            medal,
-            privilege_type: data.guard_level || 0,
-          })
-        }
         continue
       }
 
       // 进入/关注/分享直播间（exact match，避免匹配到 INTERACT_WORD_V2）
       if (cmd === 'INTERACT_WORD') {
         const data = body.data
-        if (data && this.onDanmakuMessage) {
-          const msgType = data.msg_type || 0
-          let desc = ''
-          if (msgType === 1) desc = '进入了直播间'
-          else if (msgType === 2) desc = '关注了直播间'
-          else if (msgType === 3) desc = '分享了直播间'
-          else if (msgType === 4) desc = '使用了高能激励'
-          else desc = '互动了'
-
-          // 提取头像（参考 blivechat-dev: uinfo.base.face）
-          const avatarUrl = data.uinfo?.base?.face || ''
-
-          // 提取勋章
-          const fansMedal = data.fans_medal
-          const medal = fansMedal && fansMedal.medal_name
-            ? { name: String(fansMedal.medal_name), level: Number(fansMedal.medal_level || 0) }
-            : undefined
-
-          // 特权类型
-          const privilegeType = data.privilege_type || 0
-
-          this.onDanmakuMessage({
-            type: 'interact',
-            uid: data.uid || 0,
-            uname: data.uname || '',
-            text: `${data.uname || ''} ${desc}`,
-            avatarUrl: avatarUrl || undefined,
-            medal,
-            privilege_type: privilegeType,
-            timestamp: data.timestamp ? data.timestamp * 1000 : undefined,
-          })
-
+        if (data) {
           // 通知观众加入
           if (this.onViewerJoin && data.uname) {
+            const avatarUrl = data.uinfo?.base?.face || ''
             this.onViewerJoin({
               uid: data.uid || 0,
               uname: data.uname,
@@ -430,139 +350,38 @@ export class LiveWS {
         continue
       }
 
-      // 欢迎VIP进入
+      // 欢迎VIP进入 - blivechat 自行处理
       if (cmd === 'WELCOME') {
-        const data = body.data
-        if (data && data.uname && this.onDanmakuMessage) {
-          this.onDanmakuMessage({
-            type: 'interact',
-            uid: data.uid || 0,
-            uname: data.uname,
-            text: `${data.uname} 进入了直播间`,
-            avatarUrl: data.face || undefined,
-          })
-        }
         continue
       }
 
-      // 欢迎房管
+      // 欢迎房管 - blivechat 自行处理
       if (cmd === 'WELCOME_GUARD') {
-        const data = body.data
-        if (data && data.username && this.onDanmakuMessage) {
-          this.onDanmakuMessage({
-            type: 'interact',
-            uid: data.uid || 0,
-            uname: data.username,
-            text: `${data.username} 进入了直播间`,
-            avatarUrl: data.face || undefined,
-          })
-        }
         continue
       }
 
-      // 进场特效
+      // 进场特效 - blivechat 自行处理
       if (cmd.startsWith('ENTRY_EFFECT')) {
-        const data = body.data
-        if (data && data.copy_writing && this.onDanmakuMessage) {
-          const text = (data.copy_writing as string).replace(/<%|%>/g, '')
-          this.onDanmakuMessage({
-            type: 'entry_effect',
-            uid: data.uid || 0,
-            uname: '',
-            text,
-            avatarUrl: data.face || undefined,
-          })
-        }
         continue
       }
 
-      // 上舰 (USER_TOAST_MSG_V2 - 参考 blivechat-dev 的 userToastV2Callback)
+      // 上舰 (USER_TOAST_MSG_V2) - blivechat 自行处理
       if (cmd === 'USER_TOAST_MSG_V2') {
-        const data = body.data
-        // 官方的评论栏不会显示 source==2 的消息
-        if (data && data.option?.source !== 2 && this.onDanmakuMessage) {
-          const senderUinfo = data.sender_uinfo || {}
-          const guardInfo = data.guard_info || {}
-          const payInfo = data.pay_info || {}
-          const username = senderUinfo.base?.name || ''
-          const uid = senderUinfo.uid || 0
-          const guardLevel = guardInfo.guard_level || 0
-          const guardName = guardLevel === 1 ? '总督' : guardLevel === 2 ? '提督' : guardLevel === 3 ? '舰长' : '大航海'
-          const num = payInfo.num || 1
-          const unit = payInfo.unit || '月'
-
-          this.onDanmakuMessage({
-            type: 'guard',
-            uid,
-            uname: username,
-            guard_level: guardLevel,
-            guard_name: guardName,
-            num,
-            text: `${username} 开通了${guardName} x${num}${unit}`,
-            // USER_TOAST_MSG_V2 没有直接提供 face URL，后续可异步获取
-          })
-        }
         continue
       }
 
-      // 上舰 (GUARD_BUY - 兼容旧格式)
+      // 上舰 (GUARD_BUY - 兼容旧格式) - blivechat 自行处理
       if (cmd === 'GUARD_BUY') {
-        const data = body.data
-        if (data && this.onDanmakuMessage) {
-          const guardLevel = data.guard_level || 0
-          const guardName = guardLevel === 1 ? '总督' : guardLevel === 2 ? '提督' : guardLevel === 3 ? '舰长' : '大航海'
-          this.onDanmakuMessage({
-            type: 'guard',
-            uid: data.uid || 0,
-            uname: data.username || '',
-            guard_level: guardLevel,
-            guard_name: guardName,
-            num: data.num || 1,
-            text: `${data.username || ''} 开通了${guardName} x${data.num || 1}`,
-          })
-        }
         continue
       }
 
-      // SC 醒目留言
+      // SC 醒目留言 - blivechat 自行处理
       if (cmd.startsWith('SUPER_CHAT_MESSAGE')) {
-        const data = body.data
-        if (data && this.onDanmakuMessage) {
-          const medalInfo = data.medal_info
-          const medal = medalInfo?.medal_name
-            ? { name: String(medalInfo.medal_name), level: Number(medalInfo.medal_level || 0) }
-            : undefined
-
-          this.onDanmakuMessage({
-            type: 'super_chat',
-            uid: data.uid || 0,
-            uname: data.user_info?.uname || '',
-            avatarUrl: data.user_info?.face || '',
-            text: data.message || '',
-            price: data.price || 0,
-            medal,
-            privilege_type: data.user_info?.guard_level || 0,
-          })
-        }
         continue
       }
 
-      // 点赞
+      // 点赞 - blivechat 自行处理
       if (cmd === 'LIKE_INFO_V3_CLICK') {
-        const data = body.data
-        if (data && this.onDanmakuMessage) {
-          this.onDanmakuMessage({
-            type: 'like',
-            uid: data.uid || 0,
-            uname: data.uname || '',
-            text: `${data.uname || ''} 点赞了`,
-            avatarUrl: data.uinfo?.base?.face || undefined,
-            medal: data.fans_medal?.medal_name
-              ? { name: String(data.fans_medal.medal_name), level: Number(data.fans_medal.medal_level || 0) }
-              : undefined,
-            privilege_type: data.guard_level || 0,
-          })
-        }
         continue
       }
     }
@@ -570,100 +389,76 @@ export class LiveWS {
 
   private handleDanmakuMsg(body: any) {
     const info = body.info
-    if (!info || !info[1]) return
+    if (!info) return
 
-    const text = String(info[1]).trim()
+    const text = info[1] !== undefined ? String(info[1]).trim() : ''
     const user: any[] = info[2] || []
     const uname = String(user[1] || '')
     const uid = Number(user[0] || 0)
 
-    // 提取头像URL（info[0][15] 是 modeInfo，其中 user.base.face 是头像）
-    const modeInfo = info[0][15]
-    const avatarUrl = modeInfo?.user?.base?.face || ''
-
-    // 提取表情URL（info[0][13] 是 emoticon 对象，url 字段是表情图片地址）
-    const emoticonUrl = info[0][13]?.url || null
-
-    // 特权类型 (info[7])：0=无, 1=舰长, 2=提督, 3=总督
-    const privilegeType = Number(info[7] || 0)
-
-    // 转发弹幕消息到前端
-    const medalInfo = info[3]
-    if (this.onDanmakuMessage) {
-      this.onDanmakuMessage({
-        type: 'danmaku',
-        uid,
-        uname,
-        text,
-        avatarUrl,
-        emoticonUrl: emoticonUrl || undefined,
-        medal: medalInfo && medalInfo.length > 0
-          ? { name: String(medalInfo[1] || ''), level: Number(medalInfo[0] || 0) }
-          : undefined,
-        privilege_type: privilegeType,
-      })
-    }
+    // 纯表情弹幕（无文本）不处理点歌
+    if (!text) return
 
     if (uname === 'BxNcm DJ') return // 忽略自己的消息
 
     const parsed = this.parseCommand(text)
     if (!parsed) return
 
-      // 检查点歌冷却
-      // 读取设置（逐键格式，与登录信息保存模式一致）
-      const getSettingNum = (key: string, fallback: number): number => {
-        const raw = store.get(`app_${key}`)
-        if (raw !== undefined) {
-          const v = parseInt(raw, 10)
-          if (!isNaN(v)) return v
-        }
-        return fallback
+    // 检查点歌冷却
+    // 读取设置（逐键格式，与登录信息保存模式一致）
+    const getSettingNum = (key: string, fallback: number): number => {
+      const raw = store.get(`app_${key}`)
+      if (raw !== undefined) {
+        const v = parseInt(raw, 10)
+        if (!isNaN(v)) return v
       }
-      const cooldown = getSettingNum('songCooldown', 600)
-      const userCooldownS = getSettingNum('userCooldown', 30)
+      return fallback
+    }
+    const cooldown = getSettingNum('songCooldown', 600)
+    const userCooldownS = getSettingNum('userCooldown', 30)
 
-      // 1) 用户冷却检查
-      const lastUserTime = this.lastRequestMap.get(uid) || 0
-      if (Date.now() - lastUserTime < userCooldownS * 1000) return
+    // 1) 用户冷却检查
+    const lastUserTime = this.lastRequestMap.get(uid) || 0
+    if (Date.now() - lastUserTime < userCooldownS * 1000) return
 
-      // 立即设置用户冷却（修复竞态窗口：防止搜索期间的重复点歌绕过冷却）
-      this.lastRequestMap.set(uid, Date.now())
+    // 立即设置用户冷却（修复竞态窗口：防止搜索期间的重复点歌绕过冷却）
+    this.lastRequestMap.set(uid, Date.now())
 
-      // 2) 歌曲冷却预检（使用 keyword+artist 哈希作为近似 key，避免无意义的搜索 API 调用）
-      const songKey = `${parsed.type}:${parsed.keyword}:${parsed.artist || ''}`
-      const lastSongPrecheck = this.lastSongMap.get(songKey) || 0
-      if (Date.now() - lastSongPrecheck < cooldown * 1000) {
-        // 预检失败 → 撤回用户冷却（不消耗用户点歌机会）
+    // 2) 歌曲冷却预检（使用 keyword+artist 哈希作为近似 key，避免无意义的搜索 API 调用）
+    const songKey = `${parsed.type}:${parsed.keyword}:${parsed.artist || ''}`
+    const lastSongPrecheck = this.lastSongMap.get(songKey) || 0
+    if (Date.now() - lastSongPrecheck < cooldown * 1000) {
+      // 预检失败 → 撤回用户冷却（不消耗用户点歌机会）
+      this.lastRequestMap.delete(uid)
+      return
+    }
+
+    this.processSongRequest(parsed, uname, uid).then(song => {
+      if (!song) {
+        // 搜索失败 → 撤回用户冷却
+        this.lastRequestMap.delete(uid)
+        return
+      }
+      // 3) 精确歌曲冷却检查（使用搜索结果中的真实 song.id）
+      const lastExactTime = this.lastExactSongMap.get(song.id) || 0
+      if (Date.now() - lastExactTime < cooldown * 1000) {
+        // 精确冷却未过 → 撤回用户冷却
         this.lastRequestMap.delete(uid)
         return
       }
 
-      this.processSongRequest(parsed, uname, uid).then(song => {
-        if (!song) {
-          // 搜索失败 → 撤回用户冷却
-          this.lastRequestMap.delete(uid)
-          return
-        }
-        // 3) 精确歌曲冷却检查（使用搜索结果中的真实 song.id）
-        const lastExactTime = this.lastExactSongMap.get(song.id) || 0
-        if (Date.now() - lastExactTime < cooldown * 1000) {
-          // 精确冷却未过 → 撤回用户冷却
-          this.lastRequestMap.delete(uid)
-          return
-        }
+      // 通过所有检查 → 记录冷却并投递
+      this.lastSongMap.set(songKey, Date.now())
+      this.lastExactSongMap.set(song.id, Date.now())
 
-          // 通过所有检查 → 记录冷却并投递
-        this.lastSongMap.set(songKey, Date.now())
-        this.lastExactSongMap.set(song.id, Date.now())
+      // 点歌人信息写入
+      song.requesterName = uname
+      song.requesterUid = uid
 
-        // 点歌人信息写入
-        song.requesterName = uname
-        song.requesterUid = uid
-
-        if (this.onSongRequest) {
-          this.onSongRequest({ song, requesterName: uname, requesterUid: uid })
-        }
-      })
+      if (this.onSongRequest) {
+        this.onSongRequest({ song, requesterName: uname, requesterUid: uid })
+      }
+    })
   }
 
   parseCommand(text: string): ParsedSongRequest | null {
@@ -732,11 +527,26 @@ export class LiveWS {
     return Buffer.concat([header, bodyBuf])
   }
 
-  /** 从 HTTP API 拉取当前在线观众榜（高能榜），并在认证成功后调用一次 */
-  private async fetchInitialViewers() {
-    if (this.initialViewersFetched) return
-    this.initialViewersFetched = true
+  /** 启动在线观众定期轮询（每30秒）并立即拉取一次 */
+  private async fetchAndPollViewers() {
+    // 立即拉取一次
+    await this.fetchOnlineViewers()
+    // 启动定期轮询
+    this.stopViewerPolling()
+    this.viewerPollTimer = setInterval(() => {
+      this.fetchOnlineViewers()
+    }, 3000)
+  }
 
+  private stopViewerPolling() {
+    if (this.viewerPollTimer) {
+      clearInterval(this.viewerPollTimer)
+      this.viewerPollTimer = null
+    }
+  }
+
+  /** 从 HTTP API 拉取当前在线观众榜（高能榜） */
+  private async fetchOnlineViewers() {
     try {
       // 获取主播 UID
       if (this.anchorUid === 0) {
@@ -747,6 +557,7 @@ export class LiveWS {
         const roomData = await roomResp.json()
         if (roomData?.code === 0 && roomData?.data?.uid) {
           this.anchorUid = roomData.data.uid
+          this.roomOwnerUid = roomData.data.uid
         } else {
           console.warn('[LiveWS] 无法获取主播UID，跳过观众拉取')
           return

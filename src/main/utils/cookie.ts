@@ -5,15 +5,14 @@ export function extractCookies(setCookieHeaders: string[]): Record<string, strin
   const skipKeys = ['domain', 'path', 'expires', 'max-age', 'httponly', 'secure', 'samesite', 'sameparty', 'partitioned', 'priority']
   const map: Record<string, string> = {}
   for (const header of setCookieHeaders) {
-    for (const part of header.split(',')) {
-      const trimmed = part.trim().split(';')[0].trim()
-      const eqIdx = trimmed.indexOf('=')
-      if (eqIdx <= 0) continue
-      const key = trimmed.substring(0, eqIdx).trim()
-      const val = trimmed.substring(eqIdx + 1).trim()
-      if (val && !skipKeys.includes(key.toLowerCase())) {
-        map[key] = val
-      }
+    // 先按分号分割 Set-Cookie 的各部分，取第一部分（key=value）
+    const firstPart = header.split(';')[0].trim()
+    const eqIdx = firstPart.indexOf('=')
+    if (eqIdx <= 0) continue
+    const key = firstPart.substring(0, eqIdx).trim()
+    const val = firstPart.substring(eqIdx + 1).trim()
+    if (val && !skipKeys.includes(key.toLowerCase())) {
+      map[key] = val
     }
   }
   return map

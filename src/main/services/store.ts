@@ -67,6 +67,11 @@ class AppStore {
     // 开发环境：使用 Electron 默认 userData 目录（项目根不可写时回退）
     const dataDir = app.isPackaged ? dirname(app.getPath('exe')) : app.getPath('userData')
     this.filePath = join(dataDir, 'app-data.json')
+    // 延迟加载：在 app.whenReady() 之后由外部调用 load()
+  }
+
+  /** 在 app.whenReady() 之后调用，确保 getPath 可用 */
+  init() {
     this.load()
   }
 

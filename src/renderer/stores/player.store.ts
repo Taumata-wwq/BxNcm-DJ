@@ -58,13 +58,21 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function pause() {
-    await window.electronAPI.playerPause()
-    playing.value = false
+    try {
+      await window.electronAPI.playerPause()
+      playing.value = false
+    } catch (e) {
+      console.error('[PlayerStore] pause 失败:', e)
+    }
   }
 
   async function resume() {
-    await window.electronAPI.playerResume()
-    playing.value = true
+    try {
+      await window.electronAPI.playerResume()
+      playing.value = true
+    } catch (e) {
+      console.error('[PlayerStore] resume 失败:', e)
+    }
   }
 
   async function next() {

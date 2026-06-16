@@ -12,7 +12,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version)
   },
   plugins: [
-    vue(),
+    vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith('yt-') } } }),
     electron([
       {
         entry: 'electron/main.ts',
