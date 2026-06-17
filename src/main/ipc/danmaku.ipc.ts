@@ -5,8 +5,32 @@ import { store } from '../services/store'
 import { sendDanmaku, getEmoticons, getUserEmoticons, getAllEmoticons } from '../services/live-manager'
 import { prefetchNextSongs } from './player.ipc'
 import { emoticonCache } from '../services/emoticon-cache'
+import { sendViewerJoinToDanmakuWindow, sendStatusToDanmakuWindow } from '../services/danmaku/danmaku-window'
 
 let liveWS: LiveWS | null = null
+
+// ========== 表情包主进程内存缓存 ==========
+// 目的：弹幕窗口复用主窗口启动时已获取的表情包数据，避免重复网络请求
+interface EmoticonCacheEntry {
+  data: any
+  timestamp: number
+}
+const emoticonDataCache = new Map<string, EmoticonCacheEntry>()
+const EMOTICON_CACHE_TTL = 5 * 60 * 1000 // 5 分钟过期
+
+function getCached(key: string): any | null {
+  const entry = emoticonDataCache.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.timestamp > EMOTICON_CACHE_TTL) {
+    emoticonDataCache.delete(key)
+    return null
+  }
+  return entry.data
+}
+
+function setCache(key: string, data: any) {
+  emoticonDataCache.set(key, { data, timestamp: Date.now() })
+}
 
 export function registerDanmakuIpc(mainWindow: BrowserWindow) {
   ipcMain.handle('danmaku:connect', async (_, roomId: number) => {
@@ -18,8 +42,11 @@ export function registerDanmakuIpc(mainWindow: BrowserWindow) {
       const bilibiliUid = parseInt(store.get('bilibili_uid') || '0', 10)
       const ws = new LiveWS(roomId, bilibiliUid)
       ws.onStatusChange = (status) => {
-        if (mainWindow.isDestroyed()) return
-        mainWindow.webContents.send('danmaku:status-changed', status)
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('danmaku:status-changed', status)
+        }
+        // 广播到弹幕独立窗口，使其按钮状态同步
+        sendStatusToDanmakuWindow(status)
       }
       ws.onSongRequest = (req) => {
         if (mainWindow.isDestroyed()) return
@@ -32,6 +59,7 @@ export function registerDanmakuIpc(mainWindow: BrowserWindow) {
       ws.onViewerJoin = (viewer) => {
         if (mainWindow.isDestroyed()) return
         mainWindow.webContents.send('danmaku:viewer-join', viewer)
+        sendViewerJoinToDanmakuWindow(viewer)
       }
       liveWS = ws
       await ws.connect()
@@ -58,7 +86,12 @@ export function registerDanmakuIpc(mainWindow: BrowserWindow) {
 
   ipcMain.handle('danmaku:get-emoticons', async (_, roomId: number) => {
     try {
+      const cacheKey = `room_emoticons:${roomId}`
+      const cached = getCached(cacheKey)
+      if (cached) return cached
+
       const result = await getEmoticons(roomId)
+      if (result?.code === 0) setCache(cacheKey, result)
       return result
     } catch (e: any) {
       return { code: -1, message: e.message, data: null }
@@ -67,7 +100,12 @@ export function registerDanmakuIpc(mainWindow: BrowserWindow) {
 
   ipcMain.handle('danmaku:get-user-emoticons', async () => {
     try {
+      const cacheKey = 'user_emoticons'
+      const cached = getCached(cacheKey)
+      if (cached) return cached
+
       const result = await getUserEmoticons()
+      if (result?.code === 0) setCache(cacheKey, result)
       return result
     } catch (e: any) {
       return { code: -1, message: e.message, packages: [] }
@@ -76,10 +114,59 @@ export function registerDanmakuIpc(mainWindow: BrowserWindow) {
 
   ipcMain.handle('danmaku:get-all-emoticons', async () => {
     try {
+      const cacheKey = 'all_emoticons'
+      const cached = getCached(cacheKey)
+      if (cached) return cached
+
       const result = await getAllEmoticons()
+      if (result?.code === 0) setCache(cacheKey, result)
       return result
     } catch (e: any) {
       return { code: -1, message: e.message, packages: [] }
+    }
+  })
+
+  // 弹幕窗口专用：一次性获取所有表情包（优先使用主进程缓存，避免重复请求）
+  ipcMain.handle('danmaku:get-cached-emoticons', async (_, roomId: number) => {
+    try {
+      const roomCacheKey = `room_emoticons:${roomId}`
+      const cachedRoom = getCached(roomCacheKey)
+      const cachedUser = getCached('user_emoticons')
+      const cachedAll = getCached('all_emoticons')
+
+      if (cachedRoom && cachedUser && cachedAll) {
+        return {
+          code: 0,
+          roomEmoticons: cachedRoom,
+          userEmoticons: cachedUser,
+          allEmoticons: cachedAll,
+          fromCache: true,
+        }
+      }
+
+      const [roomResult, userResult, allResult] = await Promise.allSettled([
+        cachedRoom ? Promise.resolve(cachedRoom) : getEmoticons(roomId),
+        cachedUser ? Promise.resolve(cachedUser) : getUserEmoticons(),
+        cachedAll ? Promise.resolve(cachedAll) : getAllEmoticons(),
+      ])
+
+      const roomData = roomResult.status === 'fulfilled' ? roomResult.value : null
+      const userData = userResult.status === 'fulfilled' ? userResult.value : null
+      const allData = allResult.status === 'fulfilled' ? allResult.value : null
+
+      if (roomData?.code === 0) setCache(roomCacheKey, roomData)
+      if (userData?.code === 0) setCache('user_emoticons', userData)
+      if (allData?.code === 0) setCache('all_emoticons', allData)
+
+      return {
+        code: 0,
+        roomEmoticons: roomData,
+        userEmoticons: userData,
+        allEmoticons: allData,
+        fromCache: false,
+      }
+    } catch (e: any) {
+      return { code: -1, message: e.message }
     }
   })
 

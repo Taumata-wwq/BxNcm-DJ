@@ -9,6 +9,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accentColor: '#00b5e5', // 主题色
   alwaysOnTop: false, // 是否总在顶部
   resizable: true,// 是否可调整大小
+  danmakuWindow: false, // 是否显示弹幕窗口
+  danmakuWindowFixed: false, // 是否固定弹幕窗口
+  danmakuWindowShowBorder: true, // 固定后是否显示边框
+  danmakuWindowFixShortcut: 'Alt+B', // 固定窗口快捷键
+  danmakuWindowBgColor: 'rgba(0,0,0,0.3)', // 弹幕窗口背景色
+  danmakuWindowOpacity: 90, // 弹幕窗口透明度 (5-100)
   volume: 40, // 默认音量
   neteasePlaylistId: '8512248857', // 默认wyy歌单
   bilibiliFavUrl: 'https://space.bilibili.com/62898492/lists/4641985?type=season', // 默认合集

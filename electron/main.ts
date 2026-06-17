@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import { join } from 'path'
 import { store } from '../src/main/services/store'
 import { stopObsServer } from '../src/main/services/obs'
+import { destroyDanmakuWindow, registerDanmakuFixShortcutFromStore, unregisterDanmakuFixShortcut } from '../src/main/services/danmaku/danmaku-window'
 
 // 修复 ffmpeg 视频解码兼容性问题（B站某些视频像素格式不受 Chromium GPU 解码支持）
 // 仅禁用硬件视频解码，保留 GPU 渲染和合成（否则 video autoplay 会失败）
@@ -95,6 +96,7 @@ function createWindow() {
       if (!isQuitting) {
         console.warn('[Main] 渲染进程未在超时前完成保存，强制退出')
         isQuitting = true
+        destroyDanmakuWindow()
         store.flush()
         stopObsServer()
         app.exit(0)
@@ -118,6 +120,7 @@ app.whenReady().then(() => {
   ipcMain.on('app:save-done', () => {
     if (!isQuitting) {
       isQuitting = true
+      destroyDanmakuWindow()
       store.flush()
       stopObsServer()
       app.quit()
@@ -136,6 +139,9 @@ app.whenReady().then(() => {
 
   createWindow()
 
+  // 注册全局快捷键（固定弹幕窗口，由 danmaku-window.ts 统一管理）
+  registerDanmakuFixShortcutFromStore()
+
   // 异步加载 IPC 模块
   import('../src/main/ipc').then(({ registerIpcHandlers }) => {
     registerIpcHandlers(mainWindow!)
@@ -143,12 +149,15 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  destroyDanmakuWindow()
   store.flush()
   stopObsServer()
   app.quit()
 })
 
 app.on('will-quit', () => {
+  destroyDanmakuWindow()
   store.flush()
   stopObsServer()
+  unregisterDanmakuFixShortcut()
 })

@@ -23,6 +23,7 @@ const emoticonTabsRef = ref<HTMLElement | null>(null)
 const activePackageId = ref<number>(0)
 
 // ========== B站直播间文字表情（硬编码 82 个） ==========
+// 此数组与 public/danmaku-window.html 中的 BILI_LIVE_EMOTICONS 完全一致
 const BILI_LIVE_EMOTICONS: { emoji: string; url: string }[] = [
   { emoji: '[dog]', url: 'https://i0.hdslb.com/bfs/live/4428c84e694fbf4e0ef6c06e958d9352c3582740.png' },
   { emoji: '[花]', url: 'https://i0.hdslb.com/bfs/live/7dd2ef03e13998575e4d8a803c6e12909f94e72b.png' },
@@ -261,6 +262,7 @@ watch(
       followerCount.value = -1
     }
   },
+  { immediate: true },
 )
 
 onMounted(() => {
@@ -522,13 +524,10 @@ function toggleEmoticonPopup() {
   }
 }
 
-// 当前激活的表情包
-const activePackage = ref<EmoticonPackage | null>(null)
-watch([activePackageId, emoticonPackages], () => {
-  activePackage.value = emoticonPackages.value.find(p => p.pkg_id === activePackageId.value) || null
+// 当前激活的表情包（computed，自动跟随 activePackageId 和 emoticonPackages 变化）
+const activePackage = computed<EmoticonPackage | null>(() => {
+  return emoticonPackages.value.find(p => p.pkg_id === activePackageId.value) || null
 })
-
-// ========== 水平平滑滚动工具：rAF 批量累积 deltaY，避免快速滚动卡顿 ==========
 /** 创建一个平滑水平滚动的 wheel 事件处理器 */
 function createSmoothWheelHandler(elRef: { value: HTMLElement | null }) {
   let pendingDelta = 0
@@ -812,7 +811,7 @@ function truncateContentEditable(maxChars: number) {
           loading="lazy"
           referrerpolicy="no-referrer"
         />
-        <span v-else>表情包</span>
+        <span v-else>表情</span>
       </button>
       <div
         ref="sendInputRef"

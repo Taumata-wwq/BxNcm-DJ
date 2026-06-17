@@ -36,7 +36,6 @@ export class LiveWS {
   private retryCount = 0
   private maxRetries = 20
   private anchorUid = 0
-  private roomOwnerUid = 0
   private viewerPollTimer: NodeJS.Timeout | null = null
 
   onStatusChange: ((status: DanmakuStatus) => void) | null = null
@@ -73,7 +72,7 @@ export class LiveWS {
     if (this.hosts.length === 0) {
       const info = await this.init()
       if (!info) {
-        // 回退：30秒后重试
+        // 回退：5秒后重试
         this.scheduleReconnect()
         return
       }
@@ -527,11 +526,11 @@ export class LiveWS {
     return Buffer.concat([header, bodyBuf])
   }
 
-  /** 启动在线观众定期轮询（每30秒）并立即拉取一次 */
+  /** 启动在线观众定期轮询（每3秒）并立即拉取一次 */
   private async fetchAndPollViewers() {
     // 立即拉取一次
     await this.fetchOnlineViewers()
-    // 启动定期轮询
+    // 启动定期轮询（每3秒）
     this.stopViewerPolling()
     this.viewerPollTimer = setInterval(() => {
       this.fetchOnlineViewers()
@@ -557,7 +556,6 @@ export class LiveWS {
         const roomData = await roomResp.json()
         if (roomData?.code === 0 && roomData?.data?.uid) {
           this.anchorUid = roomData.data.uid
-          this.roomOwnerUid = roomData.data.uid
         } else {
           console.warn('[LiveWS] 无法获取主播UID，跳过观众拉取')
           return

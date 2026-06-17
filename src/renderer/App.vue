@@ -124,17 +124,12 @@ async function initApp() {
   await settingsStore.loadBoot()
   updateProgress(20, '启动配置已加载')
 
-  // ====== 阶段2：应用数据（20%-40%）软件本体设置 ======
+  // ====== 阶段2：应用数据（25%-50%）软件本体设置 ======
   updateProgress(25, '正在加载应用设置...')
   await settingsStore.loadApp()
-  updateProgress(40, '应用设置已加载')
+  updateProgress(50, '应用设置已加载')
 
-  // ====== 阶段3：样式数据（40%-50%）HTTP style 界面 ======
-  updateProgress(43, '正在加载样式数据...')
-  await settingsStore.loadStyle()
-  updateProgress(50, '样式数据已加载')
-
-  // 阶段4：检测登录状态（50%-60%）
+  // 阶段3：检测登录状态（50%-60%）
   updateProgress(55, '正在检查登录状态...')
   await authStore.init()
   updateProgress(60, '登录状态已确认')

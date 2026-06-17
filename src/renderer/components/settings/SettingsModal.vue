@@ -39,9 +39,9 @@
           </div>
         </div>
 
-        <!-- 外观 -->
-        <div id="section-appearance" class="section">
-          <h3>外观</h3>
+        <!-- 窗口及外观 -->
+        <div id="section-window-appearance" class="section">
+          <h3>窗口及外观</h3>
           <div class="setting-row">
             <span>主题</span>
             <button class="btn" @click="settingsStore.toggleTheme()">
@@ -55,11 +55,6 @@
               <button class="reset-btn" @click="resetAccent()">恢复默认</button>
             </div>
           </div>
-        </div>
-
-        <!-- 窗口 -->
-        <div id="section-window" class="section">
-          <h3>窗口</h3>
           <div class="setting-row">
             <span>窗口置顶</span>
             <label class="toggle-label">
@@ -77,6 +72,66 @@
         </div>
 
         </div><!-- end basic -->
+
+
+        <!-- ==================== 弹幕窗口 ==================== -->
+        <div v-show="activeCategory === 'danmaku-window'">
+
+        <!-- 弹幕窗口设置 -->
+        <div id="section-danmaku-window" class="section">
+          <h3>弹幕窗口</h3>
+          <div class="setting-row">
+            <span>弹幕窗口</span>
+            <label class="toggle-label">
+              <input type="checkbox" :checked="danmakuWindowOpen" @change="toggleDanmakuWindow" />
+              <span class="toggle-text">{{ danmakuWindowOpen ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
+          <div class="setting-row" v-if="danmakuWindowOpen">
+            <span>显示边框</span>
+            <label class="toggle-label">
+              <input type="checkbox" :checked="danmakuWindowShowBorder" @change="toggleDanmakuWindowShowBorder" />
+              <span class="toggle-text">{{ danmakuWindowShowBorder ? '显示' : '隐藏' }}</span>
+            </label>
+          </div>
+          <div class="setting-row" v-if="danmakuWindowOpen">
+            <span>固定弹幕窗口</span>
+            <label class="toggle-label">
+              <input type="checkbox" :checked="danmakuWindowFixed" @change="toggleDanmakuWindowFixed" />
+              <span class="toggle-text">{{ danmakuWindowFixed ? '已固定' : '可移动' }}</span>
+            </label>
+          </div>
+          <div class="setting-row" v-if="danmakuWindowOpen">
+            <span>固定窗口快捷键</span>
+            <div class="shortcut-row">
+              <input
+                class="shortcut-input"
+                :value="settingsStore.settings.danmakuWindowFixShortcut"
+                @keydown.prevent="onShortcutKeyDown"
+                placeholder="Alt+B"
+                readonly
+              />
+              <button class="reset-btn" @click="resetFixShortcut">恢复默认</button>
+            </div>
+          </div>
+          <div class="setting-row" v-if="danmakuWindowOpen">
+            <span>弹幕背景色</span>
+            <div class="accent-picker-row">
+              <ColorPicker :model-value="settingsStore.settings.danmakuWindowBgColor" @update:model-value="onDanmakuBgColorChange" show-alpha />
+              <button class="reset-btn" @click="resetDanmakuBgColor">恢复默认</button>
+            </div>
+          </div>
+          <div class="setting-row" v-if="danmakuWindowOpen">
+            <span>窗口透明度</span>
+            <div class="range-row">
+              <span class="range-value">{{ danmakuWindowOpacity }}%</span>
+              <input type="range" :min="5" :max="100" :value="danmakuWindowOpacity" @input="onDanmakuWindowOpacityChange" class="range-slider" />
+            </div>
+          </div>
+          <p class="section-desc" v-if="danmakuWindowOpen" style="margin-top: 2px;">弹幕窗口为透明底、无边框、置顶显示。固定后鼠标可穿透窗口上半部分，下半部分表情栏和发送框保持可交互。</p>
+        </div>
+
+        </div><!-- end danmaku-window -->
 
 
         <!-- ==================== 歌曲 ==================== -->
@@ -504,7 +559,7 @@
         <div id="section-about" class="section">
           <h3>关于</h3>
           <div class="about-header">
-            <span class="about-text">BxNcm DJ v1.1.0 by Taumata<br/>技术栈: Vue3 + Electron + TypeScript</span>
+            <span class="about-text">BxNcm DJ v1.1.1 by Taumata<br/>技术栈: Vue3 + Electron + TypeScript</span>
             <div class="about-actions">
               <button class="btn dev-btn" @click="openDevTools">Dev</button>
               <button class="btn reset-data-btn" @click="resetAllData">重置数据</button>
@@ -548,6 +603,10 @@ const alwaysOnTop = ref(false)
 const isResizable = ref(true)
 const idleQueueSize = ref(3)
 const obsPort = ref(0)
+const danmakuWindowOpen = ref(false)
+const danmakuWindowFixed = ref(false)
+const danmakuWindowShowBorder = ref(true)
+const danmakuWindowOpacity = ref(100)
 const logContainerRef = ref<HTMLElement | null>(null)
 const settingsBodyRef = ref<HTMLElement | null>(null)
 const activeCategory = ref('basic')
@@ -587,18 +646,19 @@ const blivechatUrl = computed(() => {
 
 // 分类标签
 const categories = [
-  { id: 'basic', label: '基本' },
-  { id: 'songs', label: '歌曲' },
-  { id: 'danmaku', label: '弹幕' },
-  { id: 'obs', label: 'OBS' },
+  { id: 'basic', label: '基础设置' },
+  { id: 'danmaku-window', label: '弹幕窗口' },
+  { id: 'songs', label: '歌曲相关' },
+  { id: 'danmaku', label: '弹幕设置' },
+  { id: 'obs', label: 'OBS捕获' },
   { id: 'about', label: '关于' },
 ]
 
 // section ID → 分类 ID 映射（用于滚动高亮）
 const sectionToCategory: Record<string, string> = {
   'account': 'basic',
-  'appearance': 'basic',
-  'window': 'basic',
+  'window-appearance': 'basic',
+  'danmaku-window': 'danmaku-window',
   'song-request': 'songs',
   'lyric': 'songs',
   'idle': 'songs',
@@ -606,8 +666,8 @@ const sectionToCategory: Record<string, string> = {
   'danmaku-general': 'danmaku',
   'danmaku-block': 'danmaku',
   'danmaku-advanced': 'danmaku',
-  'danmaku-customcss': 'danmaku',
   'obs-overlay': 'obs',
+  'danmaku-capture': 'obs',
   'log': 'about',
   'thanks': 'about',
   'about': 'about',
@@ -616,13 +676,12 @@ const sectionToCategory: Record<string, string> = {
 // 每个分类的第一个 section（用于 switchCategory 时滚动定位）
 const categoryFirstSection: Record<string, string> = {
   'basic': 'account',
+  'danmaku-window': 'danmaku-window',
   'songs': 'song-request',
   'danmaku': 'danmaku-general',
   'obs': 'obs-overlay',
   'about': 'log',
 }
-
-/** showDebugMessages 已在 AppSettings 中定义，直接绑定 */
 
 /** 点击分类标签，切换视图并滚动到该分类第一个 section */
 function switchCategory(catId: string) {
@@ -672,6 +731,18 @@ onMounted(async () => {
   try { cacheSongs.value = await window.electronAPI.getAudioCacheList() } catch {}
   try { idleQueueSize.value = await window.electronAPI.getIdleQueueSize() } catch {}
   try { obsPort.value = await window.electronAPI.getObsPort() } catch {}
+  try {
+    danmakuWindowOpen.value = await window.electronAPI.isDanmakuWindowOpen()
+    danmakuWindowFixed.value = settingsStore.settings.danmakuWindowFixed
+    danmakuWindowShowBorder.value = settingsStore.settings.danmakuWindowShowBorder
+    danmakuWindowOpacity.value = settingsStore.settings.danmakuWindowOpacity || 100
+  } catch {}
+
+  // 监听弹幕窗口的固定状态变化（来自弹幕窗口的锁定按钮）
+  window.electronAPI.onDanmakuWindowFixedChanged?.((fixed: boolean) => {
+    danmakuWindowFixed.value = fixed
+    settingsStore.settings.danmakuWindowFixed = fixed
+  })
 
   // 如果 OBS 服务已开启但端口未获取到，重试一次
   if (obsPort.value === 0 && settingsStore.settings.obsOverlayEnabled) {
@@ -710,6 +781,26 @@ watch(
   },
 )
 
+// 监听自定义 CSS 变化，同步更新弹幕窗口
+watch(
+  () => settingsStore.settings.customDanmakuCss,
+  (css) => {
+    if (danmakuWindowOpen.value) {
+      window.electronAPI.updateDanmakuWindowCss(css || defaultDanmakuCss)
+    }
+  },
+)
+
+// 监听弹幕设置变化，同步更新弹幕窗口 URL
+watch(
+  () => blivechatUrl.value,
+  (url) => {
+    if (danmakuWindowOpen.value && url) {
+      window.electronAPI.updateDanmakuWindowUrl(url)
+    }
+  },
+)
+
 async function toggleAlwaysOnTop() {
   alwaysOnTop.value = !alwaysOnTop.value
   try {
@@ -724,6 +815,97 @@ async function toggleResizable() {
     await window.electronAPI.setResizable(isResizable.value)
     settingsStore.settings.resizable = isResizable.value
   } catch (e) { console.error('[SettingsModal] toggleResizable failed:', e) }
+}
+
+async function toggleDanmakuWindow() {
+  danmakuWindowOpen.value = !danmakuWindowOpen.value
+  settingsStore.settings.danmakuWindow = danmakuWindowOpen.value
+  try {
+    if (danmakuWindowOpen.value) {
+      if (!blivechatUrl.value) {
+        danmakuWindowOpen.value = false
+        settingsStore.settings.danmakuWindow = false
+        alert('请先在「OBS → 弹幕捕获」中获取身份码，再打开弹幕窗口。')
+        return
+      }
+      const css = settingsStore.settings.customDanmakuCss || defaultDanmakuCss
+      const bgColor = settingsStore.settings.danmakuWindowBgColor || 'rgba(0,0,0,0.3)'
+      const opacity = settingsStore.settings.danmakuWindowOpacity || 100
+      await window.electronAPI.openDanmakuWindow(blivechatUrl.value, css, bgColor, opacity)
+      // 同步固定模式和边框显示状态
+      if (danmakuWindowFixed.value) {
+        await window.electronAPI.setDanmakuWindowFixed(true)
+      }
+      await window.electronAPI.setDanmakuWindowShowBorder(danmakuWindowShowBorder.value)
+    } else {
+      await window.electronAPI.closeDanmakuWindow()
+    }
+  } catch (e) { console.error('[SettingsModal] toggleDanmakuWindow failed:', e) }
+}
+
+async function toggleDanmakuWindowFixed() {
+  danmakuWindowFixed.value = !danmakuWindowFixed.value
+  settingsStore.settings.danmakuWindowFixed = danmakuWindowFixed.value
+  try {
+    await window.electronAPI.setDanmakuWindowFixed(danmakuWindowFixed.value)
+  } catch (e) { console.error('[SettingsModal] toggleDanmakuWindowFixed failed:', e) }
+}
+
+async function toggleDanmakuWindowShowBorder() {
+  danmakuWindowShowBorder.value = !danmakuWindowShowBorder.value
+  settingsStore.settings.danmakuWindowShowBorder = danmakuWindowShowBorder.value
+  try {
+    await window.electronAPI.setDanmakuWindowShowBorder(danmakuWindowShowBorder.value)
+  } catch (e) { console.error('[SettingsModal] toggleDanmakuWindowShowBorder failed:', e) }
+}
+
+function onShortcutKeyDown(e: KeyboardEvent) {
+  e.preventDefault()
+  const parts: string[] = []
+  if (e.ctrlKey) parts.push('Ctrl')
+  if (e.altKey) parts.push('Alt')
+  if (e.shiftKey) parts.push('Shift')
+  if (e.metaKey) parts.push('Meta')
+  // 只取修饰键 + 一个非修饰键
+  const key = e.key
+  if (key && !['Control', 'Alt', 'Shift', 'Meta'].includes(key)) {
+    parts.push(key.length === 1 ? key.toUpperCase() : key)
+  }
+  if (parts.length >= 2) {
+    const shortcut = parts.join('+')
+    settingsStore.settings.danmakuWindowFixShortcut = shortcut
+    window.electronAPI.registerDanmakuFixShortcut(shortcut)
+  }
+}
+
+function resetFixShortcut() {
+  const defaultShortcut = 'Alt+B'
+  settingsStore.settings.danmakuWindowFixShortcut = defaultShortcut
+  window.electronAPI.registerDanmakuFixShortcut(defaultShortcut)
+}
+
+function onDanmakuBgColorChange(rgba: string) {
+  settingsStore.settings.danmakuWindowBgColor = rgba
+  if (danmakuWindowOpen.value) {
+    window.electronAPI.setDanmakuWindowBgColor(rgba)
+  }
+}
+
+function resetDanmakuBgColor() {
+  const defaultBg = 'rgba(0,0,0,0.3)'
+  settingsStore.settings.danmakuWindowBgColor = defaultBg
+  if (danmakuWindowOpen.value) {
+    window.electronAPI.setDanmakuWindowBgColor(defaultBg)
+  }
+}
+
+function onDanmakuWindowOpacityChange(e: Event) {
+  const val = parseInt((e.target as HTMLInputElement).value)
+  danmakuWindowOpacity.value = val
+  settingsStore.settings.danmakuWindowOpacity = val
+  if (danmakuWindowOpen.value) {
+    window.electronAPI.setDanmakuWindowOpacity(val)
+  }
 }
 
 async function saveIdleQueueSize() {
@@ -938,6 +1120,15 @@ span.status-text { text-align: right; min-width: 50px; flex: none; }
   cursor: pointer; transition: background 0.1s, color 0.1s;
 }
 .reset-btn:hover { color: var(--accent); border-color: var(--accent); }
+.shortcut-row { display: flex; align-items: center; gap: 8px; }
+.shortcut-input {
+  width: 100px; padding: 3px 6px; font-size: 11px; text-align: center;
+  background: var(--bg-primary); border: 1px solid var(--border);
+  color: var(--text-primary); border-radius: 0; outline: none;
+  cursor: pointer; font-family: monospace;
+}
+.shortcut-input:focus { border-color: var(--accent); }
+.shortcut-input::placeholder { color: var(--text-muted); }
 .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 11px; color: var(--text-muted); flex-direction: row-reverse; }
 .toggle-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
 .toggle-text { font-size: 11px; min-width: 48px; text-align: right; }
@@ -952,8 +1143,8 @@ span.status-text { text-align: right; min-width: 50px; flex: none; }
 .about-header { display: flex; justify-content: space-between; align-items: flex-start; }
 .about-text { font-size: 11px; color: var(--text-secondary); line-height: 1.8; }
 .about-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.dev-btn { }
-.reset-data-btn { }
+.dev-btn { display: flex; }
+.reset-data-btn { display: flex; }
 
 /* 缓存列表 */
 .cache-list { height: 180px; overflow-y: auto; background: var(--bg-primary); border: 1px solid var(--border); scrollbar-width: none; }

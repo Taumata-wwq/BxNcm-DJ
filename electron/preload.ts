@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getEmoticons: (roomId: number) => ipcRenderer.invoke('danmaku:get-emoticons', roomId),
   getUserEmoticons: () => ipcRenderer.invoke('danmaku:get-user-emoticons'),
   getAllEmoticons: () => ipcRenderer.invoke('danmaku:get-all-emoticons'),
+  getCachedEmoticons: (roomId: number) => ipcRenderer.invoke('danmaku:get-cached-emoticons', roomId),
   onDanmakuStatusChanged: (cb: (status: unknown) => void) => {
     ipcRenderer.on('danmaku:status-changed', (_, s) => cb(s))
   },
@@ -45,18 +46,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onPlayerSeek: (cb: (time: number) => void) => {
     ipcRenderer.on('player:seek', (_, t: number) => cb(t))
   },
-  onPlayerTimeUpdate: (cb: (t: number, d: number) => void) => {
-    ipcRenderer.on('player:time-update', (_, t, d) => cb(t, d))
-  },
   playerEnded: () => {
     ipcRenderer.send('player:ended')
   },
   onLyricUpdate: (cb: (lyric: unknown[]) => void) => {
     ipcRenderer.on('player:lyric-update', (_, l) => cb(l))
   },
-  // 播放器音量
-  playerSetVolume: (vol: number) => ipcRenderer.invoke('player:set-volume', vol),
-
   // 播放列表
   getPlaylist: () => ipcRenderer.invoke('playlist:get'),
   playlistRemove: (songId: string) => ipcRenderer.invoke('playlist:remove', songId),
@@ -89,10 +84,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 设置
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings: unknown) => ipcRenderer.invoke('settings:save', settings),
-  // 三阶段加载
+  // 启动加载
   loadBootData: () => ipcRenderer.invoke('boot:load'),
   loadAppData: () => ipcRenderer.invoke('app:load'),
-  loadStyleData: () => ipcRenderer.invoke('style:load'),
   getIdleQueueSize: () => ipcRenderer.invoke('settings:get-idle-queue-size'),
   setIdleQueueSize: (size: number) => ipcRenderer.invoke('settings:set-idle-queue-size', size),
   getLastIdleSource: () => ipcRenderer.invoke('settings:get-last-idle-source'),
@@ -187,4 +181,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveObsStyle: (page: string, config: Record<string, unknown>) => ipcRenderer.invoke('obs-overlay:save-style', page, config),
   toggleObsOverlay: (enabled: boolean) => ipcRenderer.invoke('obs-overlay:toggle', enabled),
   startObsIfEnabled: () => ipcRenderer.invoke('obs-overlay:start-if-enabled'),
+
+  // 弹幕窗口
+  openDanmakuWindow: (url: string, css: string, bgColor?: string, opacity?: number) => ipcRenderer.invoke('danmaku-window:open', url, css, bgColor, opacity),
+  closeDanmakuWindow: () => ipcRenderer.invoke('danmaku-window:close'),
+  setDanmakuWindowFixed: (fixed: boolean) => ipcRenderer.invoke('danmaku-window:set-fixed', fixed),
+  toggleDanmakuWindowFixed: () => ipcRenderer.invoke('danmaku-window:toggle-fixed'),
+  setDanmakuWindowShowBorder: (show: boolean) => ipcRenderer.invoke('danmaku-window:set-show-border', show),
+  registerDanmakuFixShortcut: (shortcut: string) => ipcRenderer.invoke('danmaku-window:register-fix-shortcut', shortcut),
+  setDanmakuWindowBgColor: (color: string) => ipcRenderer.invoke('danmaku-window:set-bg-color', color),
+  setDanmakuWindowOpacity: (opacity: number) => ipcRenderer.invoke('danmaku-window:set-opacity', opacity),
+  updateDanmakuWindowCss: (css: string) => ipcRenderer.invoke('danmaku-window:update-css', css),
+  updateDanmakuWindowUrl: (url: string) => ipcRenderer.invoke('danmaku-window:update-url', url),
+  isDanmakuWindowOpen: () => ipcRenderer.invoke('danmaku-window:is-open'),
+  getDanmakuWindowConfig: () => ipcRenderer.invoke('danmaku-window:get-config'),
+  onDanmakuWindowConfig: (cb: (config: unknown) => void) => {
+    ipcRenderer.on('danmaku-window:config', (_, cfg) => cb(cfg))
+  },
+  onDanmakuWindowFixedChanged: (cb: (fixed: boolean) => void) => {
+    ipcRenderer.on('danmaku-window:fixed-changed', (_, fixed) => cb(fixed))
+  },
+  setMousePassthrough: (passthrough: boolean) => ipcRenderer.invoke('danmaku-window:set-mouse-passthrough', passthrough),
 })

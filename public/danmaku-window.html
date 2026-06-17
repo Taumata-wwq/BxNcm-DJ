@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>弹幕窗口</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%; overflow: hidden;
+    background: transparent;
+    font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    font-size: 12px;
+    color: #e0e0e0;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  img {
+    -webkit-user-drag: none;
+  }
+
+  /* ========== 根容器（与主页 .danmaku-panel 完全一致） ========== */
+  .dm-root {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    position: relative;
+    height: 100vh;
+    background: transparent;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  /* ========== 状态栏（与主页 .dm-header 一致，可拖拽窗口） ========== */
+  .dm-header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px; border-bottom: 1px solid #333;
+    font-size: 11px; color: #999; flex-shrink: 0;
+    background: rgba(0,0,0,0.35);
+    -webkit-app-region: drag;
+    position: relative; z-index: 2;
+  }
+  .dm-dot { width: 6px; height: 6px; border-radius: 50%; background: #666; flex-shrink: 0; }
+  .dm-dot.on { background: #27ae60; }
+  .dm-status-text { flex: 1; min-width: 0; }
+
+  .dm-follower-count {
+    padding: 1px 5px; font-size: 10px; flex-shrink: 0;
+    color: #999; cursor: default;
+    -webkit-app-region: no-drag;
+  }
+  .dm-follower-up { color: #e74c3c !important; }
+  .dm-follower-down { color: #27ae60 !important; }
+
+  /* ========== 观众栏（与主页 .dm-viewer-list 一致） ========== */
+  .dm-viewer-list {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-bottom: 1px solid #333;
+    overflow-x: auto; flex-shrink: 0; white-space: nowrap;
+    scrollbar-width: none; -ms-overflow-style: none;
+    background: rgba(0,0,0,0.35);
+    position: relative; z-index: 2;
+  }
+  .dm-viewer-list::-webkit-scrollbar { display: none; }
+  .dm-viewer-count { flex-shrink: 0; margin-right: 4px; font-size: 10px; color: #999; }
+  .dm-viewer-item { display: flex; align-items: center; flex-shrink: 0; cursor: default; }
+  .dm-viewer-avatar {
+    width: 18px; height: 18px; border-radius: 50%; object-fit: cover;
+    border: 1px solid #444;
+  }
+  .dm-viewer-empty { font-size: 10px; color: #666; padding: 2px 0; }
+
+  /* ========== 弹幕 iframe 区域（与主页 .dm-chat-renderer 一致，flex:1） ========== */
+  .dm-iframe-wrap {
+    flex: 1; overflow: hidden; min-height: 0; position: relative;
+    background: transparent;
+    -webkit-app-region: drag;
+    z-index: 0;
+  }
+  .dm-iframe-wrap iframe {
+    width: 100%; height: 100%; border: none; display: block;
+    pointer-events: none;
+  }
+  /* 透明遮罩层：覆盖在 iframe 上方，确保鼠标事件始终落在父文档 DOM 上，
+     避免 iframe 独立渲染上下文导致父文档收不到 mousemove，从而使
+     mouseenter/mouseleave 穿透切换失效 */
+  .dm-iframe-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: transparent; pointer-events: auto; z-index: 1;
+  }
+
+  /* ========== 底部交互区包装器（统一监听 mouseenter/mouseleave，避免子元素互斥切换导致计数器失衡） ========== */
+  .dm-bottom-interactive {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    -webkit-app-region: no-drag;
+  }
+
+  /* ========== 小表情栏（与主页 .dm-small-emoticon-bar 一致） ========== */
+  .dm-small-emoticon-bar {
+    display: flex; align-items: center; gap: 2px;
+    padding: 3px 10px; border-top: 1px solid #333;
+    overflow-x: auto; flex-shrink: 0; white-space: nowrap;
+    scrollbar-width: none; -ms-overflow-style: none;
+    background: rgba(0,0,0,0.35);
+    -webkit-app-region: no-drag;
+  }
+  .dm-small-emoticon-bar::-webkit-scrollbar { display: none; }
+  .dm-small-emoticon-item {
+    width: 24px; height: 24px; padding: 0; flex-shrink: 0;
+    border: 1px solid transparent; border-radius: 0;
+    background: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .dm-small-emoticon-item:hover { border-color: #00b5e5; background: rgba(255,255,255,0.05); }
+  .dm-small-emoticon-img { width: 20px; height: 20px; object-fit: contain; }
+
+  /* ========== 发送框（与主页 .dm-send-row 一致） ========== */
+  .dm-send-row {
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 10px; border-top: 1px solid #333; flex-shrink: 0;
+    background: rgba(0,0,0,0.35);
+    -webkit-app-region: no-drag;
+  }
+  .dm-emoji-btn {
+    width: 26px; height: 26px; padding: 0; font-size: 14px; line-height: 1;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 0;
+    background: rgba(0,0,0,0.3); color: #999; cursor: pointer;
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    box-sizing: border-box; overflow: hidden;
+  }
+  .dm-emoji-btn:hover { border-color: #00b5e5; color: #00b5e5; }
+  .dm-emoji-btn.active { border-color: #00b5e5; background: rgba(0,181,229,0.1); }
+  .dm-emoji-btn:disabled { opacity: 0.5; cursor: default; }
+  .dm-emoji-btn-cover { width: 22px; height: 22px; object-fit: contain; }
+
+  .dm-send-input {
+    flex: 1; min-width: 0; min-height: 26px; max-height: 60px;
+    padding: 2px 6px; font-size: 11px; line-height: 20px;
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.12);
+    color: #e0e0e0; outline: none; box-sizing: border-box;
+    border-radius: 0; overflow-y: auto; word-break: break-all; white-space: pre-wrap;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 1px;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .dm-send-input:focus { border-color: #00b5e5; }
+  .dm-send-input:empty::before {
+    content: attr(data-placeholder);
+    color: #666; pointer-events: none;
+  }
+  .dm-send-input img.emote {
+    width: 20px !important; height: 20px !important; object-fit: contain;
+    vertical-align: middle; display: inline; flex-shrink: 0;
+  }
+
+  .dm-send-btn {
+    padding: 4px 12px; font-size: 11px; border: none; border-radius: 0;
+    background: #00b5e5; color: #fff; cursor: pointer;
+    white-space: nowrap; flex-shrink: 0; height: 26px; box-sizing: border-box;
+  }
+  .dm-send-btn:hover { opacity: 0.85; }
+  .dm-send-btn:disabled { opacity: 0.5; cursor: default; }
+
+  /* ========== 表情弹窗（正常流元素，与小表情栏互斥显示：弹出时替换小表情栏位置，不再使用 absolute 覆盖层） ========== */
+  .dm-emoticon-popup {
+    flex-shrink: 0;
+    max-height: 260px; background: #1a1a2e; border: 1px solid #333;
+    display: flex; flex-direction: column; overflow: hidden;
+    -webkit-app-region: no-drag;
+  }
+  .dm-emoticon-popup.hidden { display: none; }
+  .dm-emoticon-loading, .dm-emoticon-error, .dm-emoticon-empty {
+    padding: 20px; text-align: center; color: #666; font-size: 11px;
+  }
+  .dm-emoticon-error { color: #e74c3c; }
+  .dm-emoticon-body { flex: 1; overflow: hidden; min-height: 0; display: flex; flex-direction: column; }
+
+  /* 表情网格（与主页完全一致） */
+  .dm-emoticon-grid {
+    overflow-y: auto; padding: 2px; min-height: 0;
+    display: grid; gap: 1px; align-content: flex-start;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .dm-emoticon-grid::-webkit-scrollbar { display: none; }
+  .dm-emoticon-grid--small {
+    grid-template-columns: repeat(auto-fill, minmax(min(26px, calc(16.7% - 1px)), 1fr));
+    max-height: 180px;
+  }
+  .dm-emoticon-grid--small .dm-emoticon-item { max-width: 26px; max-height: 26px; }
+  .dm-emoticon-grid--small .dm-emoticon-img { max-width: 30px; max-height: 30px; }
+  .dm-emoticon-grid--large {
+    grid-template-columns: repeat(auto-fill, minmax(min(54px, calc(25% - 1px)), 1fr));
+    max-height: 220px;
+  }
+  .dm-emoticon-grid--large .dm-emoticon-item { max-width: 54px; max-height: 54px; }
+  .dm-emoticon-grid--large .dm-emoticon-img { max-width: 52px; max-height: 52px; }
+
+  .dm-emoticon-item {
+    aspect-ratio: 1; width: 100%; height: auto; padding: 1px;
+    border: 1px solid transparent; border-radius: 0; background: none;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+  }
+  .dm-emoticon-item:hover { border-color: #00b5e5; background: rgba(255,255,255,0.05); }
+  .dm-emoticon-item:disabled { opacity: 0.3; cursor: default; }
+  .dm-emoticon-img { width: 100%; height: 100%; object-fit: contain; }
+
+  /* 表情包切换栏（与主页 .dm-emoticon-tabs 一致） */
+  .dm-emoticon-tabs {
+    display: flex; gap: 0; padding: 4px 6px; border-top: 1px solid #333;
+    overflow-x: auto; flex-shrink: 0;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .dm-emoticon-tabs::-webkit-scrollbar { display: none; }
+  .dm-emoticon-tab {
+    padding: 2px 6px; font-size: 10px; border: 1px solid #333;
+    background: none; color: #999; cursor: pointer; white-space: nowrap;
+    border-radius: 0; flex-shrink: 0; display: flex; align-items: center; gap: 3px; min-height: 24px;
+  }
+  .dm-emoticon-tab:not(:first-child) { border-left: none; }
+  .dm-emoticon-tab.active { background: #00b5e5; color: #fff; border-color: #00b5e5; }
+  .dm-emoticon-tab:hover:not(.active) { background: rgba(255,255,255,0.05); }
+  .dm-emoticon-tab-cover { width: 16px; height: 16px; object-fit: contain; border-radius: 2px; }
+  .dm-emoticon-tab-text { font-size: 10px; }
+</style>
+</head>
+<body>
+
+<div class="dm-root">
+  <!-- 状态栏（与主页 .dm-header 一致） -->
+  <div class="dm-header">
+    <span class="dm-dot"></span>
+    <span class="dm-status-text">等待连接...</span>
+    <span class="dm-follower-count" style="display:none">粉丝 0</span>
+  </div>
+
+  <!-- 观众栏（与主页 .dm-viewer-list 一致） -->
+  <div class="dm-viewer-list">
+    <span class="dm-viewer-count">观众 0</span>
+    <span class="dm-viewer-empty">暂无观众数据</span>
+  </div>
+
+  <!-- 弹幕 iframe（与主页 DanmakuIframe 一致） -->
+  <div class="dm-iframe-wrap">
+    <iframe id="dm-iframe" src="about:blank"></iframe>
+    <div class="dm-iframe-overlay"></div>
+  </div>
+
+  <!-- ===== 底部交互区（统一包裹，mouseenter/mouseleave 单点监听，避免子元素互斥切换导致计数器失衡） ===== -->
+  <div class="dm-bottom-interactive">
+    <!-- 小表情栏（与主页 .dm-small-emoticon-bar 一致） -->
+    <div class="dm-small-emoticon-bar"></div>
+
+    <!-- 表情弹窗（与小表情栏互斥显示，正常流定位在小表情栏和发送框之间） -->
+    <div class="dm-emoticon-popup hidden">
+      <div class="dm-emoticon-loading">加载中...</div>
+      <div class="dm-emoticon-tabs"></div>
+    </div>
+
+    <!-- 发送框（与主页 .dm-send-row 一致） -->
+    <div class="dm-send-row">
+      <button class="dm-emoji-btn" title="发送表情"><span>表情</span></button>
+      <div class="dm-send-input" contenteditable="true" data-placeholder="biu~"></div>
+      <button class="dm-send-btn">发送</button>
+    </div>
+  </div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ==================== 内置 B站 表情（与主页 BILI_LIVE_EMOTICONS 完全一致，82个） ====================
+  // 注意：此数组与 DanmakuPanel.vue 中的 BILI_LIVE_EMOTICONS 完全一致
+  // 修改时需同步更新两处，避免弹幕窗口与主窗口表情不一致
+  var BILI_LIVE_EMOTICONS = [
+    { emoji: '[dog]', url: 'https://i0.hdslb.com/bfs/live/4428c84e694fbf4e0ef6c06e958d9352c3582740.png' },
+    { emoji: '[花]', url: 'https://i0.hdslb.com/bfs/live/7dd2ef03e13998575e4d8a803c6e12909f94e72b.png' },
+    { emoji: '[妙]', url: 'https://i0.hdslb.com/bfs/live/08f735d950a0fba267dda140673c9ab2edf6410d.png' },
+    { emoji: '[哇]', url: 'https://i0.hdslb.com/bfs/live/650c3e22c06edcbca9756365754d38952fc019c3.png' },
+    { emoji: '[爱]', url: 'https://i0.hdslb.com/bfs/live/1daaa5d284dafaa16c51409447da851ff1ec557f.png' },
+    { emoji: '[手机]', url: 'https://i0.hdslb.com/bfs/live/b159f90431148a973824f596288e7ad6a8db014b.png' },
+    { emoji: '[撇嘴]', url: 'https://i0.hdslb.com/bfs/live/4255ce6ed5d15b60311728a803d03dd9a24366b2.png' },
+    { emoji: '[委屈]', url: 'https://i0.hdslb.com/bfs/live/69312e99a00d1db2de34ef2db9220c5686643a3f.png' },
+    { emoji: '[抓狂]', url: 'https://i0.hdslb.com/bfs/live/a7feb260bb5b15f97d7119b444fc698e82516b9f.png' },
+    { emoji: '[比心]', url: 'https://i0.hdslb.com/bfs/live/4e029593562283f00d39b99e0557878c4199c71d.png' },
+    { emoji: '[赞]', url: 'https://i0.hdslb.com/bfs/live/2dd666d3651bafe8683acf770b7f4163a5f49809.png' },
+    { emoji: '[滑稽]', url: 'https://i0.hdslb.com/bfs/live/8624fd172037573c8600b2597e3731ef0e5ea983.png' },
+    { emoji: '[吃瓜]', url: 'https://i0.hdslb.com/bfs/live/ffb53c252b085d042173379ac724694ce3196194.png' },
+    { emoji: '[笑哭]', url: 'https://i0.hdslb.com/bfs/live/c5436c6806c32b28d471bb23d42f0f8f164a187a.png' },
+    { emoji: '[捂脸]', url: 'https://i0.hdslb.com/bfs/live/e6073c6849f735ae6cb7af3a20ff7dcec962b4c5.png' },
+    { emoji: '[喝彩]', url: 'https://i0.hdslb.com/bfs/live/b51824125d09923a4ca064f0c0b49fc97d3fab79.png' },
+    { emoji: '[偷笑]', url: 'https://i0.hdslb.com/bfs/live/e2ba16f947a23179cdc00420b71cc1d627d8ae25.png' },
+    { emoji: '[大笑]', url: 'https://i0.hdslb.com/bfs/live/e2589d086df0db8a7b5ca2b1273c02d31d4433d4.png' },
+    { emoji: '[惊喜]', url: 'https://i0.hdslb.com/bfs/live/9c75761c5b6e1ff59b29577deb8e6ad996b86bd7.png' },
+    { emoji: '[傲娇]', url: 'https://i0.hdslb.com/bfs/live/b5b44f099059a1bafb2c2722cfe9a6f62c1dc531.png' },
+    { emoji: '[疼]', url: 'https://i0.hdslb.com/bfs/live/492b10d03545b7863919033db7d1ae3ef342df2f.png' },
+    { emoji: '[吓]', url: 'https://i0.hdslb.com/bfs/live/c6bed64ffb78c97c93a83fbd22f6fdf951400f31.png' },
+    { emoji: '[阴险]', url: 'https://i0.hdslb.com/bfs/live/a4df45c035b0ca0c58f162b5fb5058cf273d0d09.png' },
+    { emoji: '[惊讶]', url: 'https://i0.hdslb.com/bfs/live/bc26f29f62340091737c82109b8b91f32e6675ad.png' },
+    { emoji: '[生病]', url: 'https://i0.hdslb.com/bfs/live/84c92239591e5ece0f986c75a39050a5c61c803c.png' },
+    { emoji: '[嘘]', url: 'https://i0.hdslb.com/bfs/live/b6226219384befa5da1d437cb2ff4ba06c303844.png' },
+    { emoji: '[奸笑]', url: 'https://i0.hdslb.com/bfs/live/5935e6a4103d024955f749d428311f39e120a58a.png' },
+    { emoji: '[囧]', url: 'https://i0.hdslb.com/bfs/live/204413d3cf330e122230dcc99d29056f2a60e6f2.png' },
+    { emoji: '[捂脸2]', url: 'https://i0.hdslb.com/bfs/live/a2ad0cc7e390a303f6d243821479452d31902a5f.png' },
+    { emoji: '[出窍]', url: 'https://i0.hdslb.com/bfs/live/bb8e95fa54512ffea07023ea4f2abee4a163e7a0.png' },
+    { emoji: '[吐了啊]', url: 'https://i0.hdslb.com/bfs/live/2b6b4cc33be42c3257dc1f6ef3a39d666b6b4b1a.png' },
+    { emoji: '[鼻子]', url: 'https://i0.hdslb.com/bfs/live/f4ed20a70d0cb85a22c0c59c628aedfe30566b37.png' },
+    { emoji: '[调皮]', url: 'https://i0.hdslb.com/bfs/live/84fe12ecde5d3875e1090d83ac9027cb7d7fba9f.png' },
+    { emoji: '[酸]', url: 'https://i0.hdslb.com/bfs/live/98fd92c6115b0d305f544b209c78ec322e4bb4ff.png' },
+    { emoji: '[冷]', url: 'https://i0.hdslb.com/bfs/live/b804118a1bdb8f3bec67d9b108d5ade6e3aa93a9.png' },
+    { emoji: '[OK]', url: 'https://i0.hdslb.com/bfs/live/86268b09e35fbe4215815a28ef3cf25ec71c124f.png' },
+    { emoji: '[微笑]', url: 'https://i0.hdslb.com/bfs/live/f605dd8229fa0115e57d2f16cb019da28545452b.png' },
+    { emoji: '[藏狐]', url: 'https://i0.hdslb.com/bfs/live/05ef7849e7313e9c32887df922613a7c1ad27f12.png' },
+    { emoji: '[龇牙]', url: 'https://i0.hdslb.com/bfs/live/8b99266ea7b9e86cf9d25c3d1151d80c5ba5c9a1.png' },
+    { emoji: '[防护]', url: 'https://i0.hdslb.com/bfs/live/17435e60dcc28ce306762103a2a646046ff10b0a.png' },
+    { emoji: '[笑]', url: 'https://i0.hdslb.com/bfs/live/a91a27f83c38b5576f4cd08d4e11a2880de78918.png' },
+    { emoji: '[一般]', url: 'https://i0.hdslb.com/bfs/live/8d436de0c3701d87e4ca9c1be01c01b199ac198e.png' },
+    { emoji: '[嫌弃]', url: 'https://i0.hdslb.com/bfs/live/c409425ba1ad2c6534f0df7de350ba83a9c949e5.png' },
+    { emoji: '[无语]', url: 'https://i0.hdslb.com/bfs/live/4781a77be9c8f0d4658274eb4e3012c47a159f23.png' },
+    { emoji: '[哈欠]', url: 'https://i0.hdslb.com/bfs/live/6e496946725cd66e7ff1b53021bf1cc0fc240288.png' },
+    { emoji: '[可怜]', url: 'https://i0.hdslb.com/bfs/live/8e88e6a137463703e96d4f27629f878efa323456.png' },
+    { emoji: '[歪嘴笑]', url: 'https://i0.hdslb.com/bfs/live/bea1f0497888f3e9056d3ce14ba452885a485c02.png' },
+    { emoji: '[亲亲]', url: 'https://i0.hdslb.com/bfs/live/10662d9c0d6ddb3203ecf50e77788b959d4d1928.png' },
+    { emoji: '[问号]', url: 'https://i0.hdslb.com/bfs/live/a0c456b6d9e3187399327828a9783901323bfdb5.png' },
+    { emoji: '[波吉]', url: 'https://i0.hdslb.com/bfs/live/57dee478868ed9f1ce3cf25a36bc50bde489c404.png' },
+    { emoji: '[OH]', url: 'https://i0.hdslb.com/bfs/live/0d5123cddf389302df6f605087189fd10919dc3c.png' },
+    { emoji: '[再见]', url: 'https://i0.hdslb.com/bfs/live/f408e2af700adcc2baeca15510ef620bed8d4c43.png' },
+    { emoji: '[白眼]', url: 'https://i0.hdslb.com/bfs/live/7fa907ae85fa6327a0466e123aee1ac32d7c85f7.png' },
+    { emoji: '[鼓掌]', url: 'https://i0.hdslb.com/bfs/live/d581d0bc30c8f9712b46ec02303579840c72c42d.png' },
+    { emoji: '[大哭]', url: 'https://i0.hdslb.com/bfs/live/816402551e6ce30d08b37a917f76dea8851fe529.png' },
+    { emoji: '[呆]', url: 'https://i0.hdslb.com/bfs/live/179c7e2d232cd74f30b672e12fc728f8f62be9ec.png' },
+    { emoji: '[流汗]', url: 'https://i0.hdslb.com/bfs/live/b00e2e02904096377061ec5f93bf0dd3321f1964.png' },
+    { emoji: '[生气]', url: 'https://i0.hdslb.com/bfs/live/2c69dad2e5c0f72f01b92746bc9d148aee1993b2.png' },
+    { emoji: '[加油]', url: 'https://i0.hdslb.com/bfs/live/fbc3c8bc4152a65bbf4a9fd5a5d27710fbff2119.png' },
+    { emoji: '[害羞]', url: 'https://i0.hdslb.com/bfs/live/d8ce9b05c0e40cec61a15ba1979c8517edd270bf.png' },
+    { emoji: '[虎年]', url: 'https://i0.hdslb.com/bfs/live/a51af0d7d9e60ce24f139c468a3853f9ba9bb184.png' },
+    { emoji: '[doge2]', url: 'https://i0.hdslb.com/bfs/live/f547cc853cf43e70f1e39095d9b3b5ac1bf70a8d.png' },
+    { emoji: '[金钱豹]', url: 'https://i0.hdslb.com/bfs/live/b6e8131897a9a718ee280f2510bfa92f1d84429b.png' },
+    { emoji: '[瓜子]', url: 'https://i0.hdslb.com/bfs/live/fd35718ac5a278fd05fe5287ebd41de40a59259d.png' },
+    { emoji: '[墨镜]', url: 'https://i0.hdslb.com/bfs/live/5e01c237642c8b662a69e21b8e0fbe6e7dbc2aa1.png' },
+    { emoji: '[难过]', url: 'https://i0.hdslb.com/bfs/live/5776481e380648c0fb3d4ad6173475f69f1ce149.png' },
+    { emoji: '[抱抱]', url: 'https://i0.hdslb.com/bfs/live/abddb0b621b389fc8c2322b1cfcf122d8936ba91.png' },
+    { emoji: '[跪了]', url: 'https://i0.hdslb.com/bfs/live/4f2155b108047d60c1fa9dccdc4d7abba18379a0.png' },
+    { emoji: '[摊手]', url: 'https://i0.hdslb.com/bfs/live/1e0a2baf088a34d56e2cc226b2de36a5f8d6c926.png' },
+    { emoji: '[热]', url: 'https://i0.hdslb.com/bfs/live/6df760280b17a6cbac8c1874d357298f982ba4cf.png' },
+    { emoji: '[三星堆]', url: 'https://i0.hdslb.com/bfs/live/0a1ab3f0f2f2e29de35c702ac1ecfec7f90e325d.png' },
+    { emoji: '[鼠]', url: 'https://i0.hdslb.com/bfs/live/98f842994035505c728e32e32045d649e371ecd6.png' },
+    { emoji: '[汤圆]', url: 'https://i0.hdslb.com/bfs/live/23ae12d3a71b9d7a22c8773343969fcbb94b20d0.png' },
+    { emoji: '[泼水]', url: 'https://i0.hdslb.com/bfs/live/29533893115c4609a4af336f49060ea13173ca78.png' },
+    { emoji: '[鬼魂]', url: 'https://i0.hdslb.com/bfs/live/5d86d55ba9a2f99856b523d8311cf75cfdcccdbc.png' },
+    { emoji: '[不行]', url: 'https://i0.hdslb.com/bfs/live/607f74ccf5eec7d2b17d91b9bb36be61a5dd196b.png' },
+    { emoji: '[响指]', url: 'https://i0.hdslb.com/bfs/live/3b2fedf09b0ac79679b5a47f5eb3e8a38e702387.png' },
+    { emoji: '[牛]', url: 'https://i0.hdslb.com/bfs/live/5e61223561203c50340b4c9b41ba7e4b05e48ae2.png' },
+    { emoji: '[保佑]', url: 'https://i0.hdslb.com/bfs/live/241b13adb4933e38b7ea6f5204e0648725e76fbf.png' },
+    { emoji: '[抱拳]', url: 'https://i0.hdslb.com/bfs/live/3f170894dd08827ee293afcb5a3d2b60aecdb5b1.png' },
+    { emoji: '[给力]', url: 'https://i0.hdslb.com/bfs/live/d1ba5f4c54332a21ed2ca0dcecaedd2add587839.png' },
+    { emoji: '[耶]', url: 'https://i0.hdslb.com/bfs/live/eb2d84ba623e2335a48f73fb5bef87bcf53c1239.png' }
+  ];
+
+  // ==================== 工具函数 ====================
+  var api = window.electronAPI;
+
+  function buildBiliEmojiPackage() {
+    return {
+      pkg_id: -1, pkg_name: 'B站emoji', pkg_type: 1,
+      pkg_url: BILI_LIVE_EMOTICONS[0].url, pkg_mtime: 0,
+      emoticons: BILI_LIVE_EMOTICONS.map(function(e, i) {
+        return {
+          emoticon_id: -100 - i, emoticon_unique: e.emoji, emoji: e.emoji,
+          descript: e.emoji, url: e.url, width: 32, height: 32,
+          is_dynamic: 0, perm: 1, emote_size: 1
+        };
+      })
+    };
+  }
+
+  // ==================== 状态（与主页 DanmakuPanel 字段一一对应） ====================
+  var ROOM_ID = 0;
+  var blivechatUrl = '';
+  var packages = [];
+  var activePkgId = -1;
+  var popupVisible = false;
+  var sending = false;
+  var connected = false;
+  var viewerList = [];
+  var isFixed = false;
+  var configReceived = false;
+  var emoticonLoading = false;
+  var toastTimer = 0;
+
+  // ==================== DOM 引用 ====================
+  var root = document.querySelector('.dm-root');
+  var statusDot = root.querySelector('.dm-dot');
+  var statusText = root.querySelector('.dm-status-text');
+  var fanCountEl = root.querySelector('.dm-follower-count');
+  var viewerBar = root.querySelector('.dm-viewer-list');
+  var blcIframe = document.getElementById('dm-iframe');
+  var emojiBtn = root.querySelector('.dm-emoji-btn');
+  var input = root.querySelector('.dm-send-input');
+  var sendBtn = root.querySelector('.dm-send-btn');
+  var smallBar = root.querySelector('.dm-small-emoticon-bar');
+  var popup = root.querySelector('.dm-emoticon-popup');
+  var tabs = popup.querySelector('.dm-emoticon-tabs');
+  var interactiveZone = root.querySelector('.dm-bottom-interactive');
+
+  // ==================== 日志 ====================
+  function log(msg) { try { console.log('[dm-win]', msg); } catch(e) {} }
+  function err(msg) { try { console.error('[dm-win]', msg); } catch(e) {} }
+
+  // 禁止在非文本输入区域拖拽选中文本和拖拽图片；文本框内保持可编辑、可选择。
+  document.addEventListener('selectstart', function(e) {
+    if (input && input.contains(e.target)) return;
+    e.preventDefault();
+  });
+  document.addEventListener('dragstart', function(e) {
+    if (input && input.contains(e.target)) return;
+    e.preventDefault();
+  });
+
+  // ==================== Toast 提示 ====================
+  function toast(msg, duration) {
+    if (toastTimer) clearTimeout(toastTimer);
+    statusText.textContent = msg;
+    statusText.style.color = '#e74c3c';
+    toastTimer = setTimeout(function() {
+      statusText.style.color = '';
+      statusText.textContent = connected ? '已连接' : '未连接';
+      toastTimer = 0;
+    }, duration || 3000);
+  }
+
+  // ==================== 粉丝数显示（与主页 DanmakuPanel 一致） ====================
+  var followerCount = -1;
+  var prevFollowerCount = -1;
+  var anchorUid = 0;
+  var followerTimer = 0;
+  var followerColorTimer = 0;
+
+  function formatFollowerCount(n) {
+    if (n >= 10000) return (n / 10000).toFixed(1) + '万';
+    return n.toLocaleString();
+  }
+
+  function updateFanCountEl() {
+    if (followerCount < 0 || !connected) {
+      fanCountEl.style.display = 'none';
+      return;
+    }
+    fanCountEl.style.display = '';
+    fanCountEl.textContent = '粉丝 ' + formatFollowerCount(followerCount);
+    fanCountEl.title = '粉丝数: ' + followerCount.toLocaleString();
+    // 涨跌颜色
+    if (followerColorTimer) { clearTimeout(followerColorTimer); followerColorTimer = 0; }
+    if (prevFollowerCount >= 0 && followerCount !== prevFollowerCount) {
+      if (followerCount > prevFollowerCount) {
+        fanCountEl.classList.add('dm-follower-up'); fanCountEl.classList.remove('dm-follower-down');
+        followerColorTimer = setTimeout(function() { fanCountEl.classList.remove('dm-follower-up'); followerColorTimer = 0; }, 60000);
+      } else {
+        fanCountEl.classList.add('dm-follower-down'); fanCountEl.classList.remove('dm-follower-up');
+        followerColorTimer = setTimeout(function() { fanCountEl.classList.remove('dm-follower-down'); followerColorTimer = 0; }, 30000);
+      }
+    }
+  }
+
+  async function fetchFollowerCount() {
+    if (!connected || !api) return;
+    if (anchorUid === 0 && ROOM_ID > 0) {
+      try {
+        var roomInfo = await api.liveGetRoomInfoByRoom(ROOM_ID);
+        if (roomInfo && roomInfo.uid) anchorUid = roomInfo.uid;
+      } catch(e) { /* 继续等待下次轮询 */ }
+      if (anchorUid === 0) return;
+    }
+    if (anchorUid === 0) return;
+    try {
+      var result = await api.liveGetFollowerCount(anchorUid);
+      if (result && result.code === 0 && result.follower >= 0) {
+        prevFollowerCount = followerCount >= 0 ? followerCount : result.follower;
+        followerCount = result.follower;
+        updateFanCountEl();
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  function startFollowerPolling() {
+    stopFollowerPolling();
+    fetchFollowerCount();
+    followerTimer = setInterval(function() { fetchFollowerCount(); }, 5000);
+  }
+
+  function stopFollowerPolling() {
+    if (followerTimer) { clearInterval(followerTimer); followerTimer = 0; }
+  }
+
+  // ==================== 固定态鼠标穿透控制 ====================
+  // 单容器 mouseenter/mouseleave 方案：
+  //   在 .dm-bottom-interactive（包裹底部所有交互控件）上绑定一对 mouseenter/mouseleave，
+  //   因为该容器始终在 DOM 中且位置稳定，不受子元素（小表情栏↔弹窗互斥切换）影响。
+  //   - 鼠标进入底部交互区 → setIgnoreMouseEvents(false) 关闭穿透（可点击）
+  //   - 鼠标离开底部交互区 → setIgnoreMouseEvents(true, { forward: true }) 开启穿透
+  // 优势：无计数器、无子元素事件绑定、互斥切换不干扰事件状态。
+
+  var isInInteractive = false;
+  var passthroughTimer = 0;
+
+  function onInteractiveEnter() {
+    if (!isFixed || isInInteractive) return;
+    isInInteractive = true;
+    if (passthroughTimer) { clearTimeout(passthroughTimer); passthroughTimer = 0; }
+    if (api && api.setMousePassthrough) api.setMousePassthrough(false);
+  }
+
+  function onInteractiveLeave() {
+    if (!isFixed || !isInInteractive) return;
+    isInInteractive = false;
+    if (passthroughTimer) clearTimeout(passthroughTimer);
+    passthroughTimer = setTimeout(function() {
+      passthroughTimer = 0;
+      if (!isInInteractive && api && api.setMousePassthrough) api.setMousePassthrough(true);
+    }, 100);
+  }
+
+  if (interactiveZone) {
+    interactiveZone.addEventListener('mouseenter', onInteractiveEnter);
+    interactiveZone.addEventListener('mouseleave', onInteractiveLeave);
+  }
+
+  // ==================== 固定态：抑制穿透区域的 tooltip 提示 ====================
+  // 仅抑制上半部分（弹幕区+观众栏）的 title，下半部分（表情栏+发送框）保持可交互，tooltip 正常显示
+  var savedTitles = [];
+
+  function suppressAllTitles() {
+    // 仅选择穿透区域内的 [title] 元素：观众栏 + iframe 区
+    var all = document.querySelectorAll('.dm-viewer-list [title], .dm-iframe-wrap [title]');
+    savedTitles = [];
+    for (var i = 0; i < all.length; i++) {
+      savedTitles.push({ el: all[i], title: all[i].title });
+      all[i].removeAttribute('title');
+    }
+  }
+
+  function restoreAllTitles() {
+    for (var i = 0; i < savedTitles.length; i++) {
+      try { savedTitles[i].el.setAttribute('title', savedTitles[i].title); } catch(e) {}
+    }
+    savedTitles = [];
+  }
+
+  // 动态创建的元素也要抑制 title，但仅限穿透区域（观众栏+iframe）
+  var titleObserver = null;
+  function startTitleObserver() {
+    if (titleObserver) return;
+    titleObserver = new MutationObserver(function(mutations) {
+      if (!isFixed) return;
+      mutations.forEach(function(m) {
+        m.addedNodes.forEach(function(node) {
+          if (node.nodeType === 1) {
+            // 仅处理穿透区域内的元素
+            var inPenetrateZone = node.closest && node.closest('.dm-viewer-list, .dm-iframe-wrap');
+            if (node.hasAttribute && node.hasAttribute('title') && inPenetrateZone) {
+              savedTitles.push({ el: node, title: node.getAttribute('title') });
+              node.removeAttribute('title');
+            }
+            if (node.querySelectorAll) {
+              var titled = node.querySelectorAll('.dm-viewer-list [title], .dm-iframe-wrap [title]');
+              for (var i = 0; i < titled.length; i++) {
+                savedTitles.push({ el: titled[i], title: titled[i].getAttribute('title') });
+                titled[i].removeAttribute('title');
+              }
+            }
+          }
+        });
+      });
+    });
+    titleObserver.observe(document.body, { childList: true, subtree: true });
+  }
+  startTitleObserver();
+
+  // ==================== 连接状态 ====================
+  function setConnected(val) {
+    if (connected === val) return;
+    connected = val;
+    if (val) {
+      statusDot.classList.add('on');
+      statusText.textContent = '已连接';
+      statusText.style.color = '';
+      startFollowerPolling();
+    } else {
+      statusDot.classList.remove('on');
+      statusText.textContent = '未连接';
+      statusText.style.color = '';
+      viewerList = [];
+      updateViewerBar();
+      stopFollowerPolling();
+      followerCount = -1;
+      updateFanCountEl();
+    }
+    refreshSendBtn();
+  }
+
+  // ==================== 观众栏 ====================
+  function updateViewerBar() {
+    if (viewerList.length > 0) {
+      var shown = viewerList.slice(-50);
+      var html = '<span class="dm-viewer-count">观众 ' + viewerList.length + '</span>';
+      for (var i = 0; i < shown.length; i++) {
+        var v = shown[i];
+        html += '<span class="dm-viewer-item" title="' + (v.uname || '') + '">';
+        if (v.avatarUrl) html += '<img class="dm-viewer-avatar" src="' + v.avatarUrl + '" loading="lazy" referrerpolicy="no-referrer">';
+        html += '</span>';
+      }
+      viewerBar.innerHTML = html;
+    } else {
+      viewerBar.innerHTML = '<span class="dm-viewer-count">观众 0</span><span class="dm-viewer-empty">暂无观众数据</span>';
+    }
+  }
+
+  // ==================== 输入框（与主页 getInputText / insertSmallEmoticon / onContentInput / truncateContentEditable 完全一致） ====================
+  function getInputText() {
+    var t = '';
+    input.childNodes.forEach(function(n) {
+      if (n.nodeType === 3) t += n.textContent || '';
+      else if (n.tagName === 'IMG') t += n.dataset.emoji || n.alt || '';
+      else if (n.nodeType === 1) t += (n.textContent || '');
+    });
+    return t;
+  }
+
+  function truncateContentEditable(maxChars) {
+    var text = getInputText();
+    if (text.length <= maxChars) return;
+    input.innerHTML = '';
+    for (var i = 0; i < maxChars; i++) { input.appendChild(document.createTextNode(text[i])); }
+  }
+
+  function onContentInput() {
+    var text = getInputText();
+    if (text.length > 40) truncateContentEditable(40);
+    refreshSendBtn();
+  }
+
+  function refreshSendBtn() {
+    sendBtn.disabled = !connected || !getInputText().trim() || sending;
+  }
+
+  input.addEventListener('input', onContentInput);
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].indexOf(e.key) >= 0) {
+      e.stopPropagation();
+    }
+  });
+
+  sendBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    sendMessage();
+  });
+
+  // ==================== 发送文本弹幕（与主页 sendMessage 完全一致） ====================
+  function sendMessage() {
+    var text = getInputText().trim();
+    if (!text || sending) return;
+    if (!connected) { toast('弹幕未连接，无法发送'); return; }
+    if (!ROOM_ID || ROOM_ID <= 0) { toast('房间ID无效(' + ROOM_ID + ')，请先连接直播间'); return; }
+    if (!api || !api.sendDanmaku) { toast('发送接口不可用'); return; }
+
+    sending = true;
+    sendBtn.disabled = true;
+    log('发送弹幕: roomId=' + ROOM_ID + ' txt=' + text);
+
+    api.sendDanmaku(ROOM_ID, text).then(function(r) {
+      log('发送结果: ' + JSON.stringify(r));
+      if (r && r.code === 0) {
+        input.innerHTML = '';
+        onContentInput();
+      } else {
+        toast('发送失败: ' + (r && r.message ? r.message : 'code=' + (r && r.code)));
+      }
+    }).catch(function(e) {
+      toast('发送异常: ' + (e && e.message ? e.message : e));
+    }).finally(function() {
+      sending = false;
+      refreshSendBtn();
+    });
+  }
+
+  // ==================== 发送表情弹幕（与主页 sendEmoticon 完全一致） ====================
+  function isCommentEmoticon(emo) {
+    return (emo.emoticon_unique || '').indexOf('[') === 0;
+  }
+
+  function sendEmoticon(emo) {
+    if (sending) return;
+    if (!connected) { toast('弹幕未连接，无法发送'); return; }
+    if (!ROOM_ID || ROOM_ID <= 0) { toast('房间ID无效(' + ROOM_ID + ')，请先连接直播间'); return; }
+    if (!api || !api.sendDanmaku) { toast('发送接口不可用'); return; }
+
+    sending = true;
+    togglePopup(false);
+
+    var emojiText = emo.emoji || emo.emoticon_unique || '';
+    log('发送表情: ' + emojiText + ' roomId=' + ROOM_ID);
+
+    var promise;
+    if (isCommentEmoticon(emo)) {
+      var upowerMsg = 'upower_' + emojiText;
+      log('发送评论表情(upower): ' + upowerMsg);
+      promise = api.sendDanmaku(ROOM_ID, upowerMsg, undefined, undefined, 1).then(function(r) {
+        if (r && r.code !== 0) {
+          log('upower 格式失败(code=' + r.code + ')，降级为文本: ' + emojiText);
+          return api.sendDanmaku(ROOM_ID, emojiText);
+        }
+        return r;
+      });
+    } else {
+      promise = api.sendDanmaku(ROOM_ID, emojiText, emojiText, emo.emoticon_id);
+    }
+
+    promise.then(function(r) {
+      log('表情发送结果: ' + JSON.stringify(r));
+      if (r && r.code !== 0) {
+        toast('发送失败: ' + (r.message || 'code=' + r.code));
+      }
+    }).catch(function(e) {
+      toast('发送异常: ' + (e && e.message ? e.message : e));
+    }).finally(function() { sending = false; });
+  }
+
+  // ==================== 小表情插入输入框（与主页 insertSmallEmoticon 完全一致） ====================
+  function insertSmallEmoticon(emo) {
+    input.focus();
+    var img = document.createElement('img');
+    img.src = emo.url; img.alt = emo.emoji; img.dataset.emoji = emo.emoji;
+    img.className = 'emote'; img.referrerPolicy = 'no-referrer';
+    img.style.cssText = 'width:20px;height:20px;object-fit:contain;vertical-align:middle;display:inline;flex-shrink:0';
+    var sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      var r = sel.getRangeAt(0); r.deleteContents(); r.insertNode(img);
+      r.setStartAfter(img); r.collapse(true);
+      sel.removeAllRanges(); sel.addRange(r);
+    } else { input.appendChild(img); }
+    onContentInput();
+    input.focus();
+  }
+
+  // ==================== 表情弹窗（与主页 toggleEmoticonPopup / onDocumentClick 完全一致） ====================
+  emojiBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    togglePopup();
+  });
+
+  function togglePopup(show) {
+    if (show === undefined) show = !popupVisible;
+    if (show === popupVisible) return;
+    popupVisible = show;
+    if (show) {
+      // 打开弹窗时隐藏小表情栏，避免视觉重叠
+      if (smallBar) smallBar.style.display = 'none';
+      popup.classList.remove('hidden');
+      emojiBtn.classList.add('active');
+    } else {
+      popup.classList.add('hidden');
+      emojiBtn.classList.remove('active');
+      // 关闭弹窗时恢复小表情栏
+      if (smallBar) smallBar.style.display = '';
+    }
+  }
+
+  // 点击弹窗外关闭（与主页 onDocumentClick 完全一致）
+  function onDocumentClick(e) {
+    if (popupVisible && !popup.contains(e.target)) {
+      togglePopup(false);
+    }
+  }
+  document.addEventListener('click', onDocumentClick);
+
+  // 脱离焦点后收起表情弹窗
+  window.addEventListener('blur', function() {
+    if (popupVisible) togglePopup(false);
+  });
+
+  // ==================== 表情包渲染（与主页 template 完全一致） ====================
+  function renderTabGrid() {
+    var pkg = null;
+    for (var i = 0; i < packages.length; i++) {
+      if (packages[i].pkg_id === activePkgId) { pkg = packages[i]; break; }
+    }
+    if (!pkg) {
+      popup.innerHTML = '<div class="dm-emoticon-loading">暂无表情</div><div class="dm-emoticon-tabs"></div>';
+      tabs = popup.querySelector('.dm-emoticon-tabs');
+      return;
+    }
+    var isSmall = pkg.pkg_id === -1;
+    var gridClass = isSmall ? 'dm-emoticon-grid dm-emoticon-grid--small' : 'dm-emoticon-grid dm-emoticon-grid--large';
+
+    // 重建 popup 内部结构（与主页 v-if/v-else 一致）
+    popup.innerHTML = '';
+    var loading = document.createElement('div');
+    loading.className = 'dm-emoticon-loading';
+    loading.style.display = 'none';
+    popup.appendChild(loading);
+
+    var body = document.createElement('div');
+    body.className = 'dm-emoticon-body';
+    var grid = document.createElement('div');
+    grid.className = gridClass;
+    (pkg.emoticons || []).forEach(function(e) {
+      var btn = document.createElement('button');
+      btn.className = 'dm-emoticon-item';
+      btn.title = e.descript || e.emoji || '';
+      if (e.perm !== 1) btn.disabled = true;
+      var img = document.createElement('img');
+      img.className = 'dm-emoticon-img';
+      img.src = e.url || '';
+      img.alt = e.emoji || '';
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      btn.appendChild(img);
+      if (e.perm === 1) {
+        btn.addEventListener('click', function() { sendEmoticon(e); });
+      }
+      grid.appendChild(btn);
+    });
+    body.appendChild(grid);
+    popup.appendChild(body);
+
+    var tabsDiv = document.createElement('div');
+    tabsDiv.className = 'dm-emoticon-tabs';
+    popup.appendChild(tabsDiv);
+    tabs = tabsDiv;
+
+    renderTabs();
+  }
+
+  function renderTabs() {
+    tabs.innerHTML = '';
+    packages.forEach(function(p) {
+      var btn = document.createElement('button');
+      btn.className = 'dm-emoticon-tab';
+      if (p.pkg_id === activePkgId) btn.classList.add('active');
+      if (p.pkg_url) {
+        var img = document.createElement('img');
+        img.className = 'dm-emoticon-tab-cover';
+        img.src = p.pkg_url;
+        img.alt = p.pkg_name || '';
+        img.loading = 'lazy';
+        img.referrerPolicy = 'no-referrer';
+        btn.appendChild(img);
+      } else {
+        var span = document.createElement('span');
+        span.className = 'dm-emoticon-tab-text';
+        span.textContent = p.pkg_name || '';
+        btn.appendChild(span);
+      }
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        activePkgId = p.pkg_id;
+        renderTabGrid();
+      });
+      tabs.appendChild(btn);
+    });
+  }
+
+  function renderSmallBar() {
+    var seen = {};
+    var biliItems = BILI_LIVE_EMOTICONS.map(function(e, i) {
+      return { emoticon_id: -100 - i, emoticon_unique: e.emoji, emoji: e.emoji, descript: e.emoji, url: e.url, width: 32, height: 32, is_dynamic: 0, perm: 1, emote_size: 1 };
+    });
+    var emotes = [];
+    biliItems.forEach(function(e) {
+      if (!seen[e.emoji]) { seen[e.emoji] = true; emotes.push(e); }
+    });
+    packages.forEach(function(p) {
+      (p.emoticons || []).forEach(function(e) {
+        if (e.emoji && e.url && !seen[e.emoji]) { seen[e.emoji] = true; emotes.push(e); }
+      });
+    });
+    smallBar.innerHTML = '';
+    emotes.forEach(function(e) {
+      var btn = document.createElement('button');
+      btn.className = 'dm-small-emoticon-item'; btn.title = e.descript || e.emoji;
+      var img = document.createElement('img');
+      img.className = 'dm-small-emoticon-img'; img.src = e.url; img.alt = e.emoji; img.referrerPolicy = 'no-referrer';
+      btn.appendChild(img);
+      btn.addEventListener('click', function() { insertSmallEmoticon(e); });
+      smallBar.appendChild(btn);
+    });
+  }
+
+  function pickRandomCover() {
+    var covers = packages.filter(function(p) { return p.pkg_url && p.pkg_url.length > 0; });
+    if (covers.length > 0) {
+      var cover = covers[Math.floor(Math.random() * covers.length)].pkg_url;
+      var img = emojiBtn.querySelector('.dm-emoji-btn-cover');
+      if (!img) { img = document.createElement('img'); img.className = 'dm-emoji-btn-cover'; emojiBtn.innerHTML = ''; emojiBtn.appendChild(img); }
+      img.src = cover;
+    }
+  }
+
+  function refreshAllUI() {
+    pickRandomCover();
+    renderSmallBar();
+    renderTabGrid();
+  }
+
+  // ==================== 表情包加载（与主页 loadEmoticons / fetchEmoticonsFromApi 完全一致） ====================
+  var EMOTICON_CACHE_KEY = 'bili_emoticon_cache_v2';
+
+  function loadLocalCache() {
+    try { var raw = localStorage.getItem(EMOTICON_CACHE_KEY); return raw ? JSON.parse(raw) : null; } catch(e) { return null; }
+  }
+  function saveLocalCache(pkgs) { try { localStorage.setItem(EMOTICON_CACHE_KEY, JSON.stringify(pkgs)); } catch(e) {} }
+  function cacheFingerprint(pkgs) { return pkgs.map(function(p) { return p.pkg_id + ':' + (p.pkg_mtime || 0); }).sort().join('|'); }
+
+  function initEmoticons() {
+    packages = [buildBiliEmojiPackage()];
+    activePkgId = -1;
+    refreshAllUI();
+    log('已加载内置 B站 emoji (' + BILI_LIVE_EMOTICONS.length + ' 个)');
+  }
+
+  function loadEmoticons() {
+    if (emoticonLoading) return;
+    emoticonLoading = true;
+
+    // Step 1: 立即从 localStorage 缓存加载
+    var cached = loadLocalCache();
+    if (cached && cached.length > 0) {
+      packages = cached;
+      activePkgId = cached[0].pkg_id;
+      pickRandomCover();
+      log('从 localStorage 加载了 ' + cached.length + ' 个表情包');
+    }
+
+    // Step 2: 后台从 API 获取最新数据
+    fetchEmoticonsFromApi(cached);
+  }
+
+  function fetchEmoticonsFromApi(cached) {
+    if (!api) { emoticonLoading = false; return; }
+
+    var newPackages = [];
+    var seenEmoji = {};
+    var biliEmojiExtras = [];
+
+    function collectEmoticons(pkg) {
+      var emotes = (pkg.emote || pkg.emoticons || []);
+      return emotes.map(function(e) {
+        var emojiText = e.text || e.emoji || '';
+        var emoticonUrl = e.url || '';
+        var dedupKey = emojiText + '|' + emoticonUrl;
+        if (seenEmoji[dedupKey]) return null;
+        seenEmoji[dedupKey] = true;
+        return {
+          emoticon_id: e.emoticon_id || e.id || 0, emoticon_unique: e.emoticon_unique || e.text || '',
+          emoji: emojiText, descript: e.descript || e.text || emojiText,
+          url: emoticonUrl, width: e.width || 60, height: e.height || 60,
+          is_dynamic: e.is_dynamic || 0, perm: e.perm !== undefined ? e.perm : 1,
+          emote_size: (e.meta && e.meta.size) || 1
+        };
+      }).filter(Boolean);
+    }
+
+    var promises = [];
+    var promiseKeys = [];
+
+    if (ROOM_ID && ROOM_ID > 0) {
+      if (api.getEmoticons) { promises.push(api.getEmoticons(ROOM_ID)); promiseKeys.push('room'); }
+    }
+    if (api.getUserEmoticons) { promises.push(api.getUserEmoticons()); promiseKeys.push('user'); }
+    if (api.getAllEmoticons) { promises.push(api.getAllEmoticons()); promiseKeys.push('all'); }
+
+    if (promises.length === 0) { emoticonLoading = false; return; }
+
+    Promise.allSettled(promises).then(function(results) {
+      // 1. 直播间表情包
+      var roomIdx = promiseKeys.indexOf('room');
+      if (roomIdx >= 0 && results[roomIdx].status === 'fulfilled' && results[roomIdx].value) {
+        var roomResult = results[roomIdx].value;
+        if (roomResult.code === 0 && roomResult.data && roomResult.data.data) {
+          roomResult.data.data.forEach(function(pkg) {
+            var pkgUrl = pkg.pkg_url || pkg.url || pkg.cover || pkg.pkg_icon || pkg.icon || '';
+            if (pkg.pkg_name === '通用表情' && !pkgUrl) pkgUrl = 'https://i0.hdslb.com/bfs/live/39b7667c2601e4da8019472f5e3df1f2278278b6.png';
+            newPackages.push({ pkg_id: pkg.pkg_id, pkg_name: pkg.pkg_name, pkg_type: pkg.pkg_type, pkg_url: pkgUrl, pkg_mtime: pkg.mtime || 0, emoticons: collectEmoticons(pkg) });
+          });
+        }
+      }
+
+      // 2. 用户个人评论表情包
+      var userIdx = promiseKeys.indexOf('user');
+      if (userIdx >= 0 && results[userIdx].status === 'fulfilled' && results[userIdx].value) {
+        var userResult = results[userIdx].value;
+        if (userResult.code === 0 && userResult.packages) {
+          userResult.packages.forEach(function(pkg) {
+            var emotes = (pkg.emote || []);
+            if (emotes.length === 0) return;
+            if (pkg.id === 1) {
+              var newEmotes = collectEmoticons(pkg);
+              var existing = {};
+              BILI_LIVE_EMOTICONS.forEach(function(e) { existing[e.emoji] = true; });
+              biliEmojiExtras = newEmotes.filter(function(e) { return !existing[e.emoji]; });
+              return;
+            }
+            if (pkg.id === 4) return;
+            newPackages.push({ pkg_id: pkg.id, pkg_name: pkg.text || ('表情包' + pkg.id), pkg_type: pkg.type, pkg_url: pkg.url || '', pkg_mtime: pkg.mtime || 0, emoticons: collectEmoticons(pkg) });
+          });
+        }
+      }
+
+      // 3. 全量表情包（兜底）
+      var allIdx = promiseKeys.indexOf('all');
+      if (allIdx >= 0 && results[allIdx].status === 'fulfilled' && results[allIdx].value) {
+        var allResult = results[allIdx].value;
+        if (allResult.code === 0 && allResult.packages) {
+          var addedPkgIds = {};
+          newPackages.forEach(function(p) { addedPkgIds[p.pkg_id] = true; });
+          allResult.packages.forEach(function(pkg) {
+            var pkgId = pkg.id;
+            var emotes = (pkg.emote || []);
+            if (emotes.length === 0) return;
+            if (pkgId === 1) {
+              var newEmotes = collectEmoticons(pkg);
+              var existing2 = {};
+              BILI_LIVE_EMOTICONS.forEach(function(e) { existing2[e.emoji] = true; });
+              biliEmojiExtras.forEach(function(e) { existing2[e.emoji] = true; });
+              biliEmojiExtras = biliEmojiExtras.concat(newEmotes.filter(function(e) { return !existing2[e.emoji]; }));
+              return;
+            }
+            if (pkgId === 4) return;
+            if (addedPkgIds[pkgId]) return;
+            newPackages.push({ pkg_id: pkgId, pkg_name: pkg.text || ('表情包' + pkgId), pkg_type: pkg.type, pkg_url: pkg.url || '', pkg_mtime: pkg.mtime || 0, emoticons: collectEmoticons(pkg) });
+            addedPkgIds[pkgId] = true;
+          });
+        }
+      }
+
+      var biliPkg = buildBiliEmojiPackage();
+      biliPkg.emoticons = biliPkg.emoticons.concat(biliEmojiExtras);
+      if (!biliPkg.pkg_url && biliPkg.emoticons.length > 0) biliPkg.pkg_url = biliPkg.emoticons[0].url;
+      newPackages.unshift(biliPkg);
+
+      var newFingerprint = cacheFingerprint(newPackages);
+      var cachedFingerprint = cached ? cacheFingerprint(cached) : '';
+
+      if (newFingerprint !== cachedFingerprint) {
+        packages = newPackages;
+        saveLocalCache(newPackages);
+        log('表情包已更新，共 ' + newPackages.length + ' 个包');
+      } else {
+        log('表情包指纹未变，保持缓存');
+      }
+
+      if (packages.length > 0) activePkgId = packages[0].pkg_id;
+      refreshAllUI();
+      emoticonLoading = false;
+    }).catch(function(e) {
+      err('表情包加载异常: ' + (e && e.message ? e.message : e));
+      emoticonLoading = false;
+    });
+  }
+
+  // ==================== 配置接收（与主页 watch + IPC 一致） ====================
+  function applyConfig(cfg) {
+    if (!cfg) return;
+    log('配置: roomId=' + cfg.roomId + ' connected=' + cfg.connected + ' fixed=' + cfg.isFixed + ' url=' + (cfg.url ? '有' : '无'));
+
+    if (cfg.url && cfg.url !== blivechatUrl) {
+      blivechatUrl = cfg.url;
+      blcIframe.src = cfg.url;
+    }
+
+    var prevRoomId = ROOM_ID;
+    if (typeof cfg.roomId === 'number' && cfg.roomId > 0) {
+      ROOM_ID = cfg.roomId;
+      log('配置 ROOM_ID: ' + prevRoomId + ' -> ' + ROOM_ID);
+    }
+
+    if (typeof cfg.connected === 'boolean') setConnected(cfg.connected);
+    if (typeof cfg.bgColor === 'string') document.body.style.background = cfg.bgColor;
+
+    if (typeof cfg.isFixed === 'boolean' && cfg.isFixed !== isFixed) {
+      isFixed = cfg.isFixed;
+      if (isFixed) {
+        // 固定时：启用穿透（仅 -webkit-app-region: no-drag 元素可交互）
+        if (api && api.setMousePassthrough) api.setMousePassthrough(true);
+        suppressAllTitles();
+      } else {
+        // 解锁时：恢复普通窗口行为
+        if (api && api.setMousePassthrough) api.setMousePassthrough(false);
+        restoreAllTitles();
+      }
+    }
+
+    configReceived = true;
+
+    // 收到有效 roomId 后加载表情包
+    if (ROOM_ID > 0) {
+      if (prevRoomId !== ROOM_ID || packages.length <= 1) {
+        loadEmoticons();
+      }
+    }
+  }
+
+  function pullConfig() {
+    if (!api || !api.getDanmakuWindowConfig) return;
+    log('拉取配置...');
+    api.getDanmakuWindowConfig().then(function(cfg) {
+      log('pull 成功: ' + JSON.stringify(cfg));
+      applyConfig(cfg);
+    }).catch(function(e) {
+      err('pull 失败: ' + (e && e.message ? e.message : e));
+    });
+  }
+
+  // Push 模式：订阅主进程推送的配置变更
+  if (api && api.onDanmakuWindowConfig) {
+    api.onDanmakuWindowConfig(function(cfg) {
+      log('push 收到配置');
+      applyConfig(cfg);
+    });
+  }
+
+  // 监听状态变更（与主页 onDanmakuStatusChanged 一致）
+  if (api && api.onDanmakuStatusChanged) {
+    api.onDanmakuStatusChanged(function(status) {
+      log('状态变更: connected=' + status.connected + ' roomId=' + status.roomId);
+      if (status && typeof status.connected === 'boolean') setConnected(status.connected);
+      if (status && typeof status.roomId === 'number' && status.roomId > 0) {
+        var prevId = ROOM_ID;
+        ROOM_ID = status.roomId;
+        log('状态变更 ROOM_ID: ' + prevId + ' -> ' + ROOM_ID);
+        if (prevId !== ROOM_ID) loadEmoticons();
+      }
+    });
+  }
+
+  // 监听观众加入（与主页 onDanmakuViewerJoin 一致）
+  if (api && api.onDanmakuViewerJoin) {
+    api.onDanmakuViewerJoin(function(viewer) {
+      if (!viewer || !viewer.uid || !viewer.uname) return;
+      var found = false;
+      for (var i = 0; i < viewerList.length; i++) {
+        if (viewerList[i].uid === viewer.uid) { found = true; break; }
+      }
+      if (!found) { viewerList.push(viewer); updateViewerBar(); setConnected(true); }
+    });
+  }
+
+  // ==================== 初始化（与主页 onMounted 一致） ====================
+  log('弹幕窗口初始化 v7');
+  initEmoticons();
+  refreshSendBtn();
+
+  setTimeout(function() { pullConfig(); }, 200);
+  setTimeout(function() {
+    if (!configReceived) { log('3秒未收到配置，重试 pull...'); pullConfig(); }
+  }, 3000);
+})();
+</script>
+</body>
+</html>

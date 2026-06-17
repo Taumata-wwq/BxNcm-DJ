@@ -132,23 +132,19 @@ function runScrollRight(inner: HTMLElement, offset: number, dur: number, songId:
 }
 
 function detectMarquee() {
-  // 双重 rAF + setTimeout 确保布局已完全收敛
   nextTick(() => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        setTimeout(() => {
-          // 分隔线滚动检测
-          const divider = document.querySelector('.idle-divider-text') as HTMLElement | null
-          if (divider) {
-            const divOver = divider.scrollWidth - divider.clientWidth
-            if (divOver > 2) {
-              divider.style.setProperty('--divider-scroll', `-${divOver}px`)
-              divider.classList.add('idle-divider-scroll')
-            } else {
-              divider.classList.remove('idle-divider-scroll')
-            }
+        const divider = document.querySelector('.idle-divider-text') as HTMLElement | null
+        if (divider) {
+          const divOver = divider.scrollWidth - divider.clientWidth
+          if (divOver > 2) {
+            divider.style.setProperty('--divider-scroll', `-${divOver}px`)
+            divider.classList.add('idle-divider-scroll')
+          } else {
+            divider.classList.remove('idle-divider-scroll')
           }
-        }, 50)
+        }
       })
     })
   })

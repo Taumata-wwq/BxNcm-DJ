@@ -44,13 +44,13 @@ function migrateOldFormat(): boolean {
 
 export function registerSettingsIpc() {
   // 启动时迁移旧格式
-  const migrated = migrateOldFormat()
+  migrateOldFormat()
 
   // 无论是否迁移成功，当前所有设置键已在 store 中
 
-  // ====== 三阶段加载 ======
+  // ====== 启动加载 ======
 
-  /** 阶段1：启动数据 — 主题色、窗口信息（最先读取，用于加载窗口） */
+  /** 启动数据 — 主题色、窗口信息（最先读取，用于加载窗口） */
   ipcMain.handle('boot:load', () => {
     try {
       return store.loadBootData()
@@ -60,22 +60,12 @@ export function registerSettingsIpc() {
     }
   })
 
-  /** 阶段2：应用数据 — 除 boot/style 外的软件本体设置 */
+  /** 应用数据 — 软件本体设置 */
   ipcMain.handle('app:load', () => {
     try {
       return store.loadAppData()
     } catch (e) {
       console.error('[SettingsIPC] 读取应用数据失败:', (e as Error).message)
-      return {}
-    }
-  })
-
-  /** 阶段3：样式数据 — HTTP style 界面数据（最后读取，预留供启动 style 界面使用） */
-  ipcMain.handle('style:load', () => {
-    try {
-      return store.loadStyleData()
-    } catch (e) {
-      console.error('[SettingsIPC] 读取样式数据失败:', (e as Error).message)
       return {}
     }
   })

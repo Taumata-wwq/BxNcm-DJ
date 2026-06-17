@@ -51,7 +51,7 @@ export const useSettingsStore = defineStore('settings', () => {
     { deep: true }
   )
 
-  /** 阶段1：加载启动数据（主题色、窗口信息） */
+  // 阶段1：加载启动数据（主题色、窗口信息）
   async function loadBoot() {
     try {
       const boot = await window.electronAPI.loadBootData()
@@ -68,29 +68,18 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  /** 阶段2：加载应用数据（除 boot/style 外的软件本体设置） */
+  // 阶段2：加载应用数据（软件本体设置）
   async function loadApp() {
     try {
       const kvMap = await window.electronAPI.loadAppData()
       if (kvMap && Object.keys(kvMap).length > 0) {
         mergeAppData(settings.value, kvMap)
       }
-      // 三阶段加载完成后启用防抖自动保存，后续任何设置变更都将被持久化
+      // 加载完成后启用防抖自动保存
       loaded = true
     } catch (e) {
       console.error('[SettingsStore] 加载应用数据失败:', e)
       loaded = true  // 即使加载失败也启用保存，避免设置永远无法写入
-    }
-  }
-
-  /** 阶段3：加载样式数据（HTTP style 界面数据，预留） */
-  async function loadStyle() {
-    try {
-      const styleData = await window.electronAPI.loadStyleData()
-      if (!styleData) return
-      // 样式数据暂时预留，后续启动 style 界面时使用
-    } catch (e) {
-      console.error('[SettingsStore] 加载样式数据失败:', e)
     }
   }
 
@@ -156,5 +145,5 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  return { settings, loadBoot, loadApp, loadStyle, save, toggleTheme, setAccentColor }
+  return { settings, loadBoot, loadApp, save, toggleTheme, setAccentColor }
 })

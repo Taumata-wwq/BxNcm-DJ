@@ -368,17 +368,6 @@ class AppStore {
     return result
   }
 
-  /** 第3部分：样式数据 — HTTP style 界面数据（供启动 style 界面使用） */
-  loadStyleData(): Record<string, unknown> {
-    const result: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(this.data.settings)) {
-      if (k.startsWith('obs_')) {
-        try { result[k] = JSON.parse(v) } catch { result[k] = v }
-      }
-    }
-    return result
-  }
-
   /** 获取 style 设置窗口的保存位置/大小 */
   getStyleWindowBounds(): { x: number; y: number; width: number; height: number } | null {
     const raw = this.data.settings['style_window_bounds']
@@ -396,6 +385,26 @@ class AppStore {
   /** 保存 style 设置窗口的位置/大小 */
   setStyleWindowBounds(bounds: { x: number; y: number; width: number; height: number }): void {
     this.data.settings['style_window_bounds'] = JSON.stringify(bounds)
+    this.markDirty()
+  }
+
+  /** 获取弹幕窗口的保存位置/大小 */
+  getDanmakuWindowBounds(): { x: number; y: number; width: number; height: number } | null {
+    const raw = this.data.settings['danmaku_window_bounds']
+    if (!raw) return null
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed.x === 'number' && typeof parsed.y === 'number' &&
+          typeof parsed.width === 'number' && typeof parsed.height === 'number') {
+        return parsed
+      }
+    } catch { /* ignore */ }
+    return null
+  }
+
+  /** 保存弹幕窗口的位置/大小 */
+  setDanmakuWindowBounds(bounds: { x: number; y: number; width: number; height: number }): void {
+    this.data.settings['danmaku_window_bounds'] = JSON.stringify(bounds)
     this.markDirty()
   }
 

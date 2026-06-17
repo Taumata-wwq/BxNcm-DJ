@@ -102,6 +102,9 @@ watch(
       autoFetched = true
       fetchRoomInfo()
       fetchAreas()
+    } else if (!loggedIn) {
+      autoFetched = false
+      areaRestored = false
     }
   },
   { immediate: true },

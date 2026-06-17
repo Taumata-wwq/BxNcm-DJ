@@ -95,10 +95,14 @@ function handleMessage(msg) {
 
 applyStyle(currentStyle)
 
-var ws
+var ws, wsReconnectDelay = 1000
 function connectWS() {
   ws = new WebSocket('ws://localhost:' + PORT + '/queue')
-  ws.onclose = function() { setTimeout(connectWS, 2000) }
+  ws.onclose = function() {
+    wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000)
+    setTimeout(connectWS, wsReconnectDelay)
+  }
+  ws.onopen = function() { wsReconnectDelay = 1000 }
   ws.onmessage = function(e) {
     try { handleMessage(JSON.parse(e.data)) } catch(ex) {}
   }
@@ -107,6 +111,7 @@ connectWS()
 
 // 通过 postMessage 接收样式即时预览和数据转发（作为自有 WebSocket 的补充）
 window.addEventListener('message', function(e) {
+  if (e.origin !== 'http://localhost:' + PORT) return
   try {
     var msg = e.data
     if (msg && msg.type === 'style') {

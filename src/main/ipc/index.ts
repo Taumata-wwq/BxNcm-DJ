@@ -7,6 +7,7 @@ import { registerSettingsIpc } from './settings.ipc'
 import { registerLiveIpc } from './live.ipc'
 import { broadcastObsData, startObsServer, stopObsServer } from '../services/obs'
 import { store } from '../services/store'
+import { openDanmakuWindow, closeDanmakuWindow, setDanmakuWindowFixed, toggleDanmakuWindowFixed, setDanmakuWindowShowBorder, setDanmakuWindowBgColor, setDanmakuWindowOpacity, updateDanmakuWindowCss, updateDanmakuWindowUrl, isDanmakuWindowOpen, getDanmakuWindowConfig, setMousePassthrough, registerDanmakuFixShortcut } from '../services/danmaku/danmaku-window'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow) {
   registerDanmakuIpc(mainWindow)
@@ -162,5 +163,46 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
       artist: data.artist || '',
       requester: data.requester || ''
     })
+  })
+
+  // 弹幕窗口
+  ipcMain.handle('danmaku-window:open', (_event, url: string, css: string, bgColor?: string, opacity?: number) => {
+    return openDanmakuWindow(url, css, bgColor, opacity)
+  })
+  ipcMain.handle('danmaku-window:close', () => {
+    return closeDanmakuWindow()
+  })
+  ipcMain.handle('danmaku-window:set-fixed', (_event, fixed: boolean) => {
+    return setDanmakuWindowFixed(fixed)
+  })
+  ipcMain.handle('danmaku-window:toggle-fixed', () => {
+    return toggleDanmakuWindowFixed()
+  })
+  ipcMain.handle('danmaku-window:set-show-border', (_event, show: boolean) => {
+    return setDanmakuWindowShowBorder(show)
+  })
+  ipcMain.handle('danmaku-window:set-bg-color', (_event, color: string) => {
+    return setDanmakuWindowBgColor(color)
+  })
+  ipcMain.handle('danmaku-window:set-opacity', (_event, opacity: number) => {
+    return setDanmakuWindowOpacity(opacity)
+  })
+  ipcMain.handle('danmaku-window:update-css', (_event, css: string) => {
+    return updateDanmakuWindowCss(css)
+  })
+  ipcMain.handle('danmaku-window:update-url', (_event, url: string) => {
+    return updateDanmakuWindowUrl(url)
+  })
+  ipcMain.handle('danmaku-window:is-open', () => {
+    return isDanmakuWindowOpen()
+  })
+  ipcMain.handle('danmaku-window:get-config', () => {
+    return getDanmakuWindowConfig()
+  })
+  ipcMain.handle('danmaku-window:register-fix-shortcut', (_event, shortcut: string) => {
+    registerDanmakuFixShortcut(shortcut)
+  })
+  ipcMain.handle('danmaku-window:set-mouse-passthrough', (_event, passthrough: boolean) => {
+    setMousePassthrough(passthrough)
   })
 }

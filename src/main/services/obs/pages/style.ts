@@ -253,7 +253,7 @@ var DEFAULTS = {
 }
 var styleState = JSON.parse(JSON.stringify(DEFAULTS))
 
-var ws, saveTimer, cpOpenId, cpHue = 0, cpSat = 1, cpbri = 1
+var ws, cpOpenId, cpHue = 0, cpSat = 1, cpbri = 1, wsReconnectDelay = 1000
 
 // ===== 折叠/展开 =====
 function toggleSection(h2) {
@@ -602,7 +602,11 @@ function forwardToIframe(page, data) {
 
 function connect() {
   ws = new WebSocket('ws://localhost:' + PORT + '/style')
-  ws.onclose = function() { setTimeout(connect, 2000) }
+  ws.onclose = function() {
+    wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000)
+    setTimeout(connect, wsReconnectDelay)
+  }
+  ws.onopen = function() { wsReconnectDelay = 1000 }
   ws.onmessage = function(e) {
     try {
       var msg = JSON.parse(e.data)

@@ -7,6 +7,12 @@ export interface AppSettings {
   accentColor: string
   alwaysOnTop: boolean
   resizable: boolean
+  danmakuWindow: boolean
+  danmakuWindowFixed: boolean
+  danmakuWindowShowBorder: boolean
+  danmakuWindowFixShortcut: string
+  danmakuWindowBgColor: string
+  danmakuWindowOpacity: number
   volume: number
   neteasePlaylistId: string
   bilibiliFavUrl: string

@@ -211,7 +211,6 @@ onMounted(async () => {
   window.electronAPI.onDanmakuStatusChanged((s: any) => danmakuStore.updateStatus(s))
   window.electronAPI.onPlaylistUpdated((list: any[]) => playlistStore.updateQueue(list))
   window.electronAPI.onPlayerStateChanged((state: any) => playerStore.updateState(state))
-  window.electronAPI.onPlayerTimeUpdate((t: number, d: number) => playerStore.updateTime(t, d))
   window.electronAPI.onLyricUpdate((lyric: any[]) => playerStore.updateLyrics(lyric))
   window.electronAPI.onAuthStateChanged((state: any) => authStore.authState = state)
   window.electronAPI.onLogAdd((msg: string) => danmakuStore.addLog(msg))

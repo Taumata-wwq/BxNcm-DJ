@@ -18,6 +18,7 @@ interface ElectronAPI {
   getEmoticons: (roomId: number) => Promise<{ code: number; message: string; data: any }>
   getUserEmoticons: () => Promise<{ code: number; message: string; packages: any[] }>
   getAllEmoticons: () => Promise<{ code: number; message: string; packages: any[] }>
+  getCachedEmoticons: (roomId: number) => Promise<{ code: number; roomEmoticons: any; userEmoticons: any; allEmoticons: any; fromCache: boolean }>
   onDanmakuStatusChanged: (cb: (status: import('@shared/types/danmaku').DanmakuStatus) => void) => void
   onDanmakuViewerJoin: (cb: (viewer: import('@shared/types/danmaku').ViewerInfo) => void) => void
   playerPlay: (songId: string) => Promise<void>
@@ -26,13 +27,11 @@ interface ElectronAPI {
   playerSeek: (time: number) => Promise<void>
   playerNext: () => Promise<void>
   playerPrev: () => Promise<void>
-  playerSetVolume: (vol: number) => Promise<void>
   onPlayerStateChanged: (cb: (state: any) => void) => void
   onPlayUrl: (cb: (data: any) => void) => void
   onPlayerPause: (cb: () => void) => void
   onPlayerResume: (cb: () => void) => void
   onPlayerSeek: (cb: (time: number) => void) => void
-  onPlayerTimeUpdate: (cb: (t: number, d: number) => void) => void
   playerEnded: () => void
   onLyricUpdate: (cb: (lyric: any[]) => void) => void
   getPlaylist: () => Promise<any[]>
@@ -46,16 +45,16 @@ interface ElectronAPI {
   getFavorites: () => Promise<any[]>
   getIdlePlaylistInfo: () => Promise<{ name: string; owner: string; source: string } | null>
   getIdleQueueStartIndex: () => Promise<number>
+  refreshIdlePlaylist: (neteaseId: string, bilibiliId: string) => Promise<{ success: boolean; count?: number; info?: { name: string; owner: string; source: string } | null; unchanged: boolean; cached?: boolean; queue?: any[]; firstSong?: any }>
   refreshIdlePlaylistSingle: (source: 'netease' | 'bilibili', id: string, force: boolean) => Promise<{ success: boolean; count?: number; info?: { name: string; owner: string; source: string } | null; unchanged: boolean; cached?: boolean; queue?: any[]; firstSong?: any }>
   getIdlePlaylistCacheInfo: (source: 'netease' | 'bilibili', id: string) => Promise<{ name: string; songCount: number; cached: boolean }>
   loadIdlePlaylistFromCache: (source: 'netease' | 'bilibili', id: string) => Promise<{ success: boolean; reason?: string; queue?: any[]; firstSong?: any; count?: number }>
   cacheOnlyIdlePlaylist: (source: 'netease' | 'bilibili', id: string) => Promise<{ success: boolean }>
   getSettings: () => Promise<any>
   saveSettings: (settings: any) => Promise<{ success: boolean }>
-  // 三阶段加载
+  // 启动加载
   loadBootData: () => Promise<{ theme: 'dark' | 'light'; accentColor: string; alwaysOnTop: boolean; resizable: boolean; windowPosition: { x: number; y: number; width: number; height: number } | null }>
   loadAppData: () => Promise<Record<string, string>>
-  loadStyleData: () => Promise<Record<string, unknown>>
   getIdleQueueSize: () => Promise<number>
   setIdleQueueSize: (size: number) => Promise<{ success: boolean }>
   getLastIdleSource: () => Promise<'netease' | 'bilibili'>
@@ -73,6 +72,7 @@ interface ElectronAPI {
   getRecentCache: () => Promise<any[]>
   clearCache: () => Promise<{ success: boolean }>
   minimizeWindow: () => Promise<void>
+  maximizeWindow: () => Promise<void>
   closeWindow: () => Promise<void>
   setAlwaysOnTop: (flag: boolean) => Promise<boolean>
   isAlwaysOnTop: () => Promise<boolean>
@@ -111,7 +111,24 @@ interface ElectronAPI {
   startObsIfEnabled: () => Promise<{ port: number; error?: string }>
   getAudioCacheList: () => Promise<any[]>
   clearAudioCache: () => Promise<void>
+  prefetchAudioCache: (songIds: string[]) => Promise<{ success: boolean; reason?: string }>
   prefetchQueueOnStartup: () => Promise<void>
+  // 弹幕窗口
+  openDanmakuWindow: (url: string, css: string, bgColor?: string, opacity?: number) => Promise<boolean>
+  closeDanmakuWindow: () => Promise<boolean>
+  setDanmakuWindowFixed: (fixed: boolean) => Promise<boolean>
+  toggleDanmakuWindowFixed: () => Promise<boolean>
+  setDanmakuWindowShowBorder: (show: boolean) => Promise<boolean>
+  setDanmakuWindowBgColor: (color: string) => Promise<boolean>
+  setDanmakuWindowOpacity: (opacity: number) => Promise<boolean>
+  updateDanmakuWindowCss: (css: string) => Promise<boolean>
+  updateDanmakuWindowUrl: (url: string) => Promise<boolean>
+  isDanmakuWindowOpen: () => Promise<boolean>
+  getDanmakuWindowConfig: () => Promise<{ url: string; roomId: number; bgColor: string; css: string; borderColor: string; showBorder: boolean; isFixed: boolean; connected: boolean }>
+  onDanmakuWindowConfig: (cb: (config: { url: string; roomId: number; bgColor: string; css: string; borderColor: string; showBorder: boolean; isFixed: boolean; connected: boolean }) => void) => void
+  onDanmakuWindowFixedChanged: (cb: (fixed: boolean) => void) => void
+  registerDanmakuFixShortcut: (shortcut: string) => Promise<void>
+  setMousePassthrough: (passthrough: boolean) => Promise<void>
 }
 interface Window {
   electronAPI: ElectronAPI
