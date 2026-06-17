@@ -127,6 +127,7 @@ interface ElectronAPI {
   getDanmakuWindowConfig: () => Promise<{ url: string; roomId: number; bgColor: string; css: string; borderColor: string; showBorder: boolean; isFixed: boolean; connected: boolean }>
   onDanmakuWindowConfig: (cb: (config: { url: string; roomId: number; bgColor: string; css: string; borderColor: string; showBorder: boolean; isFixed: boolean; connected: boolean }) => void) => void
   onDanmakuWindowFixedChanged: (cb: (fixed: boolean) => void) => void
+  onDanmakuWindowClosed: (cb: () => void) => void
   registerDanmakuFixShortcut: (shortcut: string) => Promise<void>
   setMousePassthrough: (passthrough: boolean) => Promise<void>
 }

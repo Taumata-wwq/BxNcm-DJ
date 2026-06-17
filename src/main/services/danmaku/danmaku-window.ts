@@ -36,8 +36,8 @@ function buildDanmakuWindowOptions(): Electron.BrowserWindowConstructorOptions {
   const opts: Electron.BrowserWindowConstructorOptions = {
     width: DANMAKU_WIN_DEFAULTS.width,
     height: DANMAKU_WIN_DEFAULTS.height,
-    minWidth: 200,
-    minHeight: 300,
+    minWidth: 300,
+    minHeight: 400,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -273,6 +273,7 @@ export function openDanmakuWindow(url: string, css: string, bgColor?: string, op
   danmakuWin.on('closed', () => {
     if (saveTimer) clearTimeout(saveTimer)
     danmakuWin = null
+    sendToMainWindow('danmaku-window:closed')
   })
 
   return true

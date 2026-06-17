@@ -12,6 +12,13 @@ const sendText = ref('')
 const sending = ref(false)
 const sendInputRef = ref<HTMLElement | null>(null)
 const smallEmoticonBarRef = ref<HTMLElement | null>(null)
+const danmakuIframeRef = ref<InstanceType<typeof DanmakuIframe> | null>(null)
+
+/** 刷新下方 iframe 弹幕区域 */
+function refreshIframe() {
+  danmakuIframeRef.value?.reload()
+  danmakuStore.addLog('弹幕区域已刷新')
+}
 
 // 表情弹窗相关
 const showEmoticonPopup = ref(false)
@@ -733,6 +740,7 @@ function truncateContentEditable(maxChars: number) {
       <span class="dm-status-text">
         {{ danmakuStore.status.connected ? `已连接` : '未连接' }}
       </span>
+      <button class="dm-refresh-btn" title="刷新弹幕区域" @click="refreshIframe">⟳</button>
       <!-- 主播粉丝数（实时监控，5s轮询） -->
       <span
         v-if="danmakuStore.status.connected && followerCount >= 0"
@@ -766,6 +774,7 @@ function truncateContentEditable(maxChars: number) {
 
     <!-- 弹幕消息（blive.chat 官方 iframe 嵌入） -->
     <DanmakuIframe
+      ref="danmakuIframeRef"
       :roomId="danmakuStore.status.connected ? danmakuStore.status.roomId : 0"
       class="dm-chat-renderer"
     ></DanmakuIframe>
@@ -906,6 +915,12 @@ function truncateContentEditable(maxChars: number) {
 .dm-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
 .dm-dot.on { background: #27ae60; }
 .dm-status-text { flex: 1; min-width: 0; }
+.dm-refresh-btn {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0 2px; flex-shrink: 0;
+  transition: color 0.15s;
+}
+.dm-refresh-btn:hover { color: var(--accent); }
 
 /* 粉丝数显示 */
 .dm-follower-count {

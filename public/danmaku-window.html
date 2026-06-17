@@ -48,6 +48,13 @@
     color: #999; cursor: default;
     -webkit-app-region: no-drag;
   }
+  .dm-close-btn {
+    background: none; border: none; color: #999; cursor: pointer;
+    font-size: 12px; line-height: 1; padding: 0 2px; flex-shrink: 0;
+    -webkit-app-region: no-drag;
+    transition: color 0.15s;
+  }
+  .dm-close-btn:hover { color: #e74c3c; }
   .dm-follower-up { color: #e74c3c !important; }
   .dm-follower-down { color: #27ae60 !important; }
 
@@ -232,6 +239,7 @@
     <span class="dm-dot"></span>
     <span class="dm-status-text">等待连接...</span>
     <span class="dm-follower-count" style="display:none">粉丝 0</span>
+    <button class="dm-close-btn" title="关闭弹幕窗口">✕</button>
   </div>
 
   <!-- 观众栏（与主页 .dm-viewer-list 一致） -->
@@ -402,6 +410,7 @@
   var popup = root.querySelector('.dm-emoticon-popup');
   var tabs = popup.querySelector('.dm-emoticon-tabs');
   var interactiveZone = root.querySelector('.dm-bottom-interactive');
+  var closeBtn = root.querySelector('.dm-close-btn');
 
   // ==================== 日志 ====================
   function log(msg) { try { console.log('[dm-win]', msg); } catch(e) {} }
@@ -656,6 +665,14 @@
     sendMessage();
   });
 
+  // 关闭按钮（同步设置中的弹幕窗口开关）
+  closeBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    if (api && api.closeDanmakuWindow) {
+      api.closeDanmakuWindow();
+    }
+  });
+
   // ==================== 发送文本弹幕（与主页 sendMessage 完全一致） ====================
   function sendMessage() {
     var text = getInputText().trim();
@@ -828,7 +845,7 @@
     tabsDiv.className = 'dm-emoticon-tabs';
     popup.appendChild(tabsDiv);
     tabs = tabsDiv;
-
+    installHorizontalWheel(tabs);
     renderTabs();
   }
 
@@ -1145,6 +1162,29 @@
       if (!found) { viewerList.push(viewer); updateViewerBar(); setConnected(true); }
     });
   }
+
+  // ==================== 水平滚轮（与主页 createSmoothWheelHandler 一致） ====================
+  // 将垂直滚轮转为水平滚动，rAF 批量累积避免快速滚动卡顿
+  function installHorizontalWheel(el) {
+    if (!el) return;
+    var pendingDelta = 0;
+    var rafId = 0;
+    el.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      pendingDelta += e.deltaY;
+      if (!rafId) {
+        rafId = requestAnimationFrame(function() {
+          el.scrollLeft = Math.max(0, el.scrollLeft + pendingDelta);
+          pendingDelta = 0;
+          rafId = 0;
+        });
+      }
+    }, { passive: false });
+  }
+
+  installHorizontalWheel(smallBar);
+  installHorizontalWheel(tabs);
+  installHorizontalWheel(viewerBar);
 
   // ==================== 初始化（与主页 onMounted 一致） ====================
   log('弹幕窗口初始化 v7');

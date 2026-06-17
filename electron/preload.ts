@@ -201,5 +201,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDanmakuWindowFixedChanged: (cb: (fixed: boolean) => void) => {
     ipcRenderer.on('danmaku-window:fixed-changed', (_, fixed) => cb(fixed))
   },
+  onDanmakuWindowClosed: (cb: () => void) => {
+    ipcRenderer.on('danmaku-window:closed', () => cb())
+  },
   setMousePassthrough: (passthrough: boolean) => ipcRenderer.invoke('danmaku-window:set-mouse-passthrough', passthrough),
 })

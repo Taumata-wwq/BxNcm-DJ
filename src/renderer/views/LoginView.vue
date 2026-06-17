@@ -115,14 +115,18 @@ const bothReady = computed(() => bilibiliLoggedIn.value && neteaseLoggedIn.value
 
 onMounted(async () => {
   // App.vue 已初始化 authStore，直接读取登录状态
-  if (authStore.authState.bilibili) {
+  // 同时考虑两种状态：
+  //   1. authStore.authState.bilibili === true  → API 验证通过，cookie 有效
+  //   2. authStore.authState.bilibiliUname 存在 → 曾有登录信息（API 验证超时失败时保留）
+  // 只要满足任一条件，就认为已登录，不加载二维码
+  if (authStore.authState.bilibili || authStore.authState.bilibiliUname) {
     bilibiliLoggedIn.value = true
     bilibiliFace.value = authStore.authState.bilibiliFace || ''
     bilibiliUname.value = authStore.authState.bilibiliUname || ''
     bilibiliUid.value = authStore.authState.bilibiliUid || 0
     bilibiliAvatarOk.value = !!bilibiliFace.value
   }
-  if (authStore.authState.netease) {
+  if (authStore.authState.netease || authStore.authState.neteaseUname) {
     neteaseLoggedIn.value = true
     neteaseFace.value = authStore.authState.neteaseFace || ''
     neteaseUname.value = authStore.authState.neteaseUname || ''

@@ -744,6 +744,12 @@ onMounted(async () => {
     settingsStore.settings.danmakuWindowFixed = fixed
   })
 
+  // 监听弹幕窗口关闭（来自弹幕窗口的关闭按钮 / 原生关闭）
+  window.electronAPI.onDanmakuWindowClosed?.(() => {
+    danmakuWindowOpen.value = false
+    settingsStore.settings.danmakuWindow = false
+  })
+
   // 如果 OBS 服务已开启但端口未获取到，重试一次
   if (obsPort.value === 0 && settingsStore.settings.obsOverlayEnabled) {
     setTimeout(async () => {

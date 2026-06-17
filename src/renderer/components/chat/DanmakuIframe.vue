@@ -365,6 +365,19 @@ onBeforeUnmount(() => {
   }
   window.removeEventListener('message', onBliveChatMessage)
 })
+
+/** 手动刷新 iframe */
+function reload() {
+  clearCssInjectTimer()
+  if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null }
+  if (iframeRetryTimer) { clearTimeout(iframeRetryTimer); iframeRetryTimer = null }
+  cssInjectRetryCount = 0
+  iframeRetryCount = 0
+  iframeReady.value = false
+  iframeKey.value++
+}
+
+defineExpose({ reload })
 </script>
 
 <style scoped>
