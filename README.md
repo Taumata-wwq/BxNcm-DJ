@@ -203,7 +203,6 @@ BxNcm-DJ/
 │   │   ├── components/
 │   │   │   ├── chat/             # 弹幕相关
 │   │   │   │   ├── DanmakuIframe.vue     # blivechat iframe 嵌入
-│   │   │   │   ├── DanmakuRenderer.vue   # 弹幕渲染引擎
 │   │   │   │   └── constants.ts          # 弹幕消息类型常量
 │   │   │   ├── left-sidebar/     # 左侧边栏
 │   │   │   │   ├── SidebarTabs.vue       # 标签页切换
@@ -292,10 +291,7 @@ UI 更新 ← Vue 响应式 ← Pinia Store ← IPC (on 事件) ← 主进程服
 
 ### 弹幕系统
 
-弹幕支持两种显示方式：
-
-1. **内嵌渲染**（`DanmakuRenderer.vue`）：直接在 Vue 组件中渲染弹幕，支持平滑滚动、合并相似弹幕等功能
-2. **blivechat iframe**（`DanmakuIframe.vue`）：嵌入 blivechat 页面，支持通过 URL 参数配置和自定义 CSS 注入
+弹幕通过 **blivechat iframe**（`DanmakuIframe.vue`）嵌入 blivechat 页面，支持通过 URL 参数配置和自定义 CSS 注入。
 
 弹幕数据通过主进程的 WebSocket 连接 B站直播间获取，支持自动重连。
 
