@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { join, dirname } from 'path'
+import { join } from 'path'
 import { existsSync, mkdirSync, createWriteStream, readdirSync, rmSync, statSync } from 'fs'
 import { createHash } from 'crypto'
 import { get as httpsGet } from 'https'
@@ -13,8 +13,7 @@ class EmoticonCache {
   private cacheDir: string
 
   constructor() {
-    const dataDir = app.isPackaged ? dirname(app.getPath('exe')) : app.getPath('userData')
-    this.cacheDir = join(dataDir, 'emoticon-cache')
+    this.cacheDir = join(app.getPath('userData'), 'emoticon-cache')
     if (!existsSync(this.cacheDir)) {
       mkdirSync(this.cacheDir, { recursive: true })
     }

@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { join, dirname } from 'path'
+import { join } from 'path'
 import { existsSync, mkdirSync, unlinkSync, statSync, writeFileSync, readFileSync } from 'fs'
 import { createWriteStream } from 'fs'
 import { get as httpsGet } from 'https'
@@ -26,8 +26,7 @@ class AudioCacheManager {
   private index = new Map<string, CacheEntry>()
 
   constructor() {
-    const dataDir = app.isPackaged ? dirname(app.getPath('exe')) : app.getPath('userData')
-    this.cacheDir = join(dataDir, 'audio-cache')
+    this.cacheDir = join(app.getPath('userData'), 'audio-cache')
     this.indexFile = join(this.cacheDir, 'index.json')
     this.init()
   }

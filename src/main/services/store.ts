@@ -63,10 +63,8 @@ class AppStore {
   private dirty = false
 
   constructor() {
-    // 生产环境：数据保存在 exe 同目录，卸载时一并清理，不留残留
-    // 开发环境：使用 Electron 默认 userData 目录（项目根不可写时回退）
-    const dataDir = app.isPackaged ? dirname(app.getPath('exe')) : app.getPath('userData')
-    this.filePath = join(dataDir, 'app-data.json')
+    // 使用 Electron 标准 userData 目录，更新安装时数据不会丢失
+    this.filePath = join(app.getPath('userData'), 'app-data.json')
     // 延迟加载：在 app.whenReady() 之后由外部调用 load()
   }
 
