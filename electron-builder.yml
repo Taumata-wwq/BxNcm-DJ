@@ -46,5 +46,18 @@ asar: true
 asarUnpack:
   - "**/node_modules/ws/**"
   - "**/node_modules/qrcode/**"
+  - "**/node_modules/electron-updater/**"
+
+# 托盘图标资源
+extraResources:
+  - from: build/icon.ico
+    to: icon.ico
+
+# GitHub 自动更新发布配置
+publish:
+  - provider: github
+    owner: Taumata-wwq
+    repo: BxNcm-DJ
+    releaseType: release
 
 afterPack: "./scripts/after-pack.cjs"

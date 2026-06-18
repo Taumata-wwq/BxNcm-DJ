@@ -300,17 +300,6 @@ export function registerPlayerIpc(mainWindow: BrowserWindow) {
     return { success: true }
   })
 
-  /** 预缓存指定歌曲的音频文件 */
-  ipcMain.handle('audio-cache:prefetch', async (_, songIds: string[]) => {
-    const queue = playlistManager.getQueue()
-    const songs = queue.filter(s => songIds.includes(s.id))
-    if (songs.length === 0) return { success: false, reason: 'no_songs' }
-    audioCache.prefetch(songs).catch(e => {
-      console.error('[PlayerIPC] 手动预缓存失败:', (e as Error).message)
-    })
-    return { success: true }
-  })
-
   /** 启动时批量预缓存队列中所有非空闲歌曲（有序号部分） */
   ipcMain.handle('audio-cache:prefetch-queue', async () => {
     const queue = playlistManager.getQueue()

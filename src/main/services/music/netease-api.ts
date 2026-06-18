@@ -105,16 +105,27 @@ export const neteaseApi = {
         if (batch.length === 0) continue
 
         const idsJsonStr = '[' + batch.map(id => '{"id":' + id + '}').join(',') + ']'
-        const detailResult = await weapiRequest('/api/v3/song/detail', {
-          c: idsJsonStr,
-        }, cookie)
 
-        if (detailResult.body.code === 200 && detailResult.body.songs) {
-          for (const s of detailResult.body.songs) {
-            songs.push(mapSongItem(s))
+        // 每批最多重试 3 次
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const detailResult = await weapiRequest('/api/v3/song/detail', {
+              c: idsJsonStr,
+            }, cookie)
+
+            if (detailResult.body.code === 200 && detailResult.body.songs) {
+              for (const s of detailResult.body.songs) {
+                songs.push(mapSongItem(s))
+              }
+              break  // 成功则跳出重试循环
+            } else {
+              console.warn(`[NeteaseApi] hydrateSongs 第 ${Math.floor(i / 50) + 1} 批第 ${attempt + 1}/3 次返回异常 code:`, detailResult.body.code)
+              if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)))
+            }
+          } catch (batchErr) {
+            console.error(`[NeteaseApi] hydrateSongs 第 ${Math.floor(i / 50) + 1} 批第 ${attempt + 1}/3 次失败:`, (batchErr as Error).message)
+            if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)))
           }
-        } else {
-          console.warn(`[NeteaseApi] hydrateSongs 第 ${Math.floor(i / 50) + 1} 批返回异常 code:`, detailResult.body.code)
         }
 
         // 批次间延迟，减轻服务器压力

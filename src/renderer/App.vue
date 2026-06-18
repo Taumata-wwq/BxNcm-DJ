@@ -17,26 +17,94 @@
     </div>
     <!-- 路由视图：login / ready 阶段可见 -->
     <router-view v-show="routerVisible" />
+
+    <!-- 关闭到托盘对话框 -->
+    <CloseToTrayDialog v-if="showCloseTrayDialog" @result="handleCloseTrayResult" />
+
+    <!-- 更新通知对话框 -->
+    <UpdateNotificationDialog
+      v-if="showUpdateDialog"
+      :status="updateStatus"
+      :version="updateVersion"
+      :progress="updateDownloadProgress"
+      :message="updateMessage"
+      @close="showUpdateDialog = false"
+      @download="downloadUpdate"
+      @install="installUpdate"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, provide, computed, onUnmounted, onMounted } from 'vue'
+import { ref, provide, computed, watch, onUnmounted, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSettingsStore } from './stores/settings.store'
 import { useAuthStore } from './stores/auth.store'
+import CloseToTrayDialog from './components/settings/CloseToTrayDialog.vue'
+import UpdateNotificationDialog from './components/settings/UpdateNotificationDialog.vue'
 
 const router = useRouter()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 
 // ── 关闭前响应：保存设置后通知主进程 ──
+// 关闭到托盘对话框
+const showCloseTrayDialog = ref(false)
+
+// 更新通知对话框
+const showUpdateDialog = ref(false)
+const updateStatus = ref('')
+const updateVersion = ref('')
+const updateDownloadProgress = ref(0)
+const updateMessage = ref('')
+
 onMounted(() => {
   window.electronAPI.onBeforeClose(async () => {
     await settingsStore.save()
     window.electronAPI.appSaveDone()
   })
+
+  // 监听关闭到托盘对话框请求
+  window.electronAPI.onShowCloseToTrayDialog(() => {
+    showCloseTrayDialog.value = true
+  })
+
+  // 监听更新状态（自动检查时弹出通知）
+  window.electronAPI.onUpdateStatus?.((s: any) => {
+    updateStatus.value = s.status
+    if (s.version) updateVersion.value = s.version
+    if (s.percent !== undefined) updateDownloadProgress.value = s.percent
+    if (s.error) updateMessage.value = s.error
+    if (s.message) updateMessage.value = s.message
+    // 自动检查发现新版本或下载完成时弹出通知
+    if (s.status === 'available' || s.status === 'downloaded' || s.status === 'downloading' || s.status === 'error') {
+      showUpdateDialog.value = true
+    }
+  })
 })
+
+function handleCloseTrayResult(result: { action: string; remember: boolean }) {
+  showCloseTrayDialog.value = false
+  window.electronAPI.sendCloseToTrayResult(result)
+}
+
+async function downloadUpdate() {
+  try {
+    await window.electronAPI.downloadUpdate()
+  } catch (e) {
+    updateStatus.value = 'error'
+    updateMessage.value = (e as Error).message
+  }
+}
+
+async function installUpdate() {
+  try {
+    await window.electronAPI.installUpdate()
+  } catch (e) {
+    updateStatus.value = 'error'
+    updateMessage.value = (e as Error).message
+  }
+}
 
 // ── 状态机 ──
 // loading      → 初始加载（设置 + 鉴权），显示 overlay
@@ -45,6 +113,11 @@ onMounted(() => {
 // ready        → 主界面就绪（MainView 已挂载且队列已加载）
 type AppPhase = 'loading' | 'login' | 'loading-data' | 'ready'
 const appPhase = ref<AppPhase>('loading')
+
+// 登录阶段变化时通知主进程：登录界面关闭时无视 closeToTray 强制退出
+watch(appPhase, (phase) => {
+  window.electronAPI.setLoginPhase(phase === 'login')
+})
 
 // 主界面就绪时的淡出控制
 const fadingOut = ref(false)

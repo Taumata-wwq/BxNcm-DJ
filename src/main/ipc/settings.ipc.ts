@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { store } from '../services/store'
 import { DEFAULT_SETTINGS } from '../../shared/constants/defaults'
-import { broadcastObsData, getObsServerPort } from '../services/obs'
+import { getObsServerPort } from '../services/obs'
 import { audioCache } from '../services/player/audio-cache'
 import { emoticonCache } from '../services/emoticon-cache'
 
@@ -56,7 +56,7 @@ export function registerSettingsIpc() {
       return store.loadBootData()
     } catch (e) {
       console.error('[SettingsIPC] 读取启动数据失败:', (e as Error).message)
-      return { theme: 'dark', accentColor: '#00b5e5', alwaysOnTop: false, resizable: true, windowPosition: null }
+      return { theme: 'dark', accentColor: '#00b5e5', alwaysOnTop: false, resizable: true, closeToTray: true, closeToTrayPrompt: true, autoUpdate: true, windowPosition: null }
     }
   })
 
@@ -124,31 +124,7 @@ export function registerSettingsIpc() {
     }
   })
 
-  // OBS 叠加层样式
-  ipcMain.handle('obs-overlay:get-style', (_event, page: string) => {
-    const raw = store.get(`obs_${page}_style`)
-    if (!raw) return null
-    try {
-      return JSON.parse(raw)
-    } catch {
-      return null
-    }
-  })
-
-  ipcMain.handle('obs-overlay:save-style', (_event, page: string, config: Record<string, unknown>) => {
-    try {
-      store.set(`obs_${page}_style`, JSON.stringify(config))
-      // 如果 OBS 服务器在运行，广播样式变更
-      try {
-        broadcastObsData('style', { page, ...config })
-      } catch {}
-      return { success: true }
-    } catch (e) {
-      console.error('[SettingsIPC] 保存叠加层样式失败:', (e as Error).message)
-      return { success: false }
-    }
-  })
-
+  // OBS 叠加层端口查询
   ipcMain.handle('obs-overlay:get-port', () => {
     try {
       return getObsServerPort()

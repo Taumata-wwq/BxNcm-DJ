@@ -60,6 +60,10 @@ export interface AppSettings {
   // blivechat
   identityCode: string
   blivechatLang: string
+  // 窗口行为
+  closeToTray: boolean // 关闭时收起到托盘
+  // 自动更新
+  autoUpdate: boolean // 是否启用自动更新
 }
 
 /** 弹幕样式配置（对齐 blivechat-dev StyleGenerator Legacy DEFAULT_CONFIG） */

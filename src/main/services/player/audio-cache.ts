@@ -24,6 +24,7 @@ class AudioCacheManager {
   private cacheDir: string
   private indexFile: string
   private index = new Map<string, CacheEntry>()
+  private downloading = new Set<string>()  // 并发锁：防止同一首歌被重复下载
 
   constructor() {
     this.cacheDir = join(app.getPath('userData'), 'audio-cache')
@@ -106,50 +107,60 @@ class AudioCacheManager {
       return this.getFileUrl(songId)
     }
 
-    // LRU 淘汰：超限时删除最旧文件（不进回收站）
-    while (this.index.size >= MAX_CACHE_SIZE) {
-      this.evictOldest()
+    // 并发锁：同一首歌正在下载中，跳过重复请求
+    if (this.downloading.has(songId)) {
+      return null
     }
-
-    const ext = this.detectExt(song, url)
-    const filePath = join(this.cacheDir, `${songId}${ext}`)
+    this.downloading.add(songId)
 
     try {
-      await this.downloadFile(url, filePath)
+      // LRU 淘汰：超限时删除最旧文件（不进回收站）
+      while (this.index.size >= MAX_CACHE_SIZE) {
+        this.evictOldest()
+      }
 
-      const stat = statSync(filePath)
-      if (stat.size === 0) {
-        try { unlinkSync(filePath) } catch {}
+      const ext = this.detectExt(song, url)
+      const filePath = join(this.cacheDir, `${songId}${ext}`)
+
+      try {
+        await this.downloadFile(url, filePath)
+
+        const stat = statSync(filePath)
+        if (stat.size === 0) {
+          try { unlinkSync(filePath) } catch {}
+          return null
+        }
+
+        // 下载封面
+        let coverPath = ''
+        if (song.coverUrl) {
+          try {
+            coverPath = await this.downloadCover(songId, song.coverUrl)
+          } catch (e) {
+            console.warn(`[AudioCache] 封面下载失败 ${song.title}:`, (e as Error).message)
+          }
+        }
+
+        const entry: CacheEntry = {
+          songId,
+          title: song.title || '',
+          artist: song.artist || '',
+          filePath,
+          coverPath,
+          size: stat.size,
+          timestamp: Date.now()
+        }
+        this.index.set(songId, entry)
+        this.saveIndex()
+        console.log(`[AudioCache] 缓存完成: ${song.title} (${(stat.size / 1024 / 1024).toFixed(1)}MB)`)
+        return this.getFileUrl(songId)
+      } catch (e) {
+        console.error(`[AudioCache] 下载失败 ${song.title}:`, (e as Error).message)
+        try { if (existsSync(filePath)) unlinkSync(filePath) } catch {}
         return null
       }
-
-      // 下载封面
-      let coverPath = ''
-      if (song.coverUrl) {
-        try {
-          coverPath = await this.downloadCover(songId, song.coverUrl)
-        } catch (e) {
-          console.warn(`[AudioCache] 封面下载失败 ${song.title}:`, (e as Error).message)
-        }
-      }
-
-      const entry: CacheEntry = {
-        songId,
-        title: song.title || '',
-        artist: song.artist || '',
-        filePath,
-        coverPath,
-        size: stat.size,
-        timestamp: Date.now()
-      }
-      this.index.set(songId, entry)
-      this.saveIndex()
-      console.log(`[AudioCache] 缓存完成: ${song.title} (${(stat.size / 1024 / 1024).toFixed(1)}MB)`)
-      return this.getFileUrl(songId)
-    } catch (e) {
-      console.error(`[AudioCache] 下载失败 ${song.title}:`, (e as Error).message)
-      try { if (existsSync(filePath)) unlinkSync(filePath) } catch {}
-      return null
+    } finally {
+      this.downloading.delete(songId)
     }
   }
 

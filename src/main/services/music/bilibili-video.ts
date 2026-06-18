@@ -115,23 +115,26 @@ export const bilibiliAuth = {
   },
 
   async getVideoInfo(bvid: string): Promise<SongItem | null> {
-    try {
-      const cookieStr = getBilibiliCookieStr()
-      const res = await fetchWithTimeout(
-        `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`,
-        {
-          headers: {
-            'User-Agent': UA, 'Referer': REFERER,
-            ...(cookieStr ? { Cookie: cookieStr } : {})
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const cookieStr = getBilibiliCookieStr()
+        const res = await fetchWithTimeout(
+          `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`,
+          {
+            headers: {
+              'User-Agent': UA, 'Referer': REFERER,
+              ...(cookieStr ? { Cookie: cookieStr } : {})
+            }
           }
+        )
+        const data = await res.json()
+        if (data.code === 0 && data.data) {
+          return await mapVideoToSong(data.data)
         }
-      )
-      const data = await res.json()
-      if (data.code === 0 && data.data) {
-        return await mapVideoToSong(data.data)
+      } catch (e) {
+        console.error(`[BiliAuth] getVideoInfo 第${attempt + 1}/3 次失败:`, (e as Error).message)
       }
-    } catch (e) {
-      console.error('[BiliAuth] getVideoInfo 失败:', (e as Error).message)
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)))
     }
     return null
   },

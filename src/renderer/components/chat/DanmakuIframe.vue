@@ -109,6 +109,9 @@ const iframeSrc = computed(() => {
   // 调试
   params.set('showDebugMessages', s.showDebugMessages ? 'true' : 'false')
 
+  // 通过服务器转发消息（推荐，减少连接数）
+  params.set('relayMessagesByServer', 'true')
+
   const roomKey = code || String(props.roomId)
   return `https://blive.chat/room/${roomKey}?${params.toString()}`
 })

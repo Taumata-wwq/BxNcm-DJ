@@ -13,12 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getEmoticons: (roomId: number) => ipcRenderer.invoke('danmaku:get-emoticons', roomId),
   getUserEmoticons: () => ipcRenderer.invoke('danmaku:get-user-emoticons'),
   getAllEmoticons: () => ipcRenderer.invoke('danmaku:get-all-emoticons'),
-  getCachedEmoticons: (roomId: number) => ipcRenderer.invoke('danmaku:get-cached-emoticons', roomId),
   onDanmakuStatusChanged: (cb: (status: unknown) => void) => {
     ipcRenderer.on('danmaku:status-changed', (_, s) => cb(s))
-  },
-  onDanmakuMessage: (cb: (msg: unknown) => void) => {
-    ipcRenderer.on('danmaku:message', (_, m) => cb(m))
   },
   onDanmakuViewerJoin: (cb: (viewer: unknown) => void) => {
     ipcRenderer.on('danmaku:viewer-join', (_, v) => cb(v))
@@ -55,6 +51,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onLyricUpdate: (cb: (lyric: unknown[]) => void) => {
     ipcRenderer.on('player:lyric-update', (_, l) => cb(l))
   },
+  
   // 播放列表
   getPlaylist: () => ipcRenderer.invoke('playlist:get'),
   playlistRemove: (songId: string) => ipcRenderer.invoke('playlist:remove', songId),
@@ -64,11 +61,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onPlaylistUpdated: (cb: (list: unknown[]) => void) => {
     ipcRenderer.on('song:playlist-updated', (_, l) => cb(l))
   },
-
-  // 收藏
-  favoriteAdd: (song: unknown) => ipcRenderer.invoke('favorite:add', song),
-  favoriteRemove: (songId: string) => ipcRenderer.invoke('favorite:remove', songId),
-  getFavorites: () => ipcRenderer.invoke('favorite:get'),
 
   // 空闲歌单
   getIdlePlaylistInfo: () => ipcRenderer.invoke('idle-playlist:info'),
@@ -111,14 +103,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 搜索
   searchSong: (keyword: string) => ipcRenderer.invoke('search:song', keyword),
 
-  // 缓存
-  getRecentCache: () => ipcRenderer.invoke('cache:get-recent'),
-  clearCache: () => ipcRenderer.invoke('cache:clear'),
-
   // 音频文件缓存
   getAudioCacheList: () => ipcRenderer.invoke('audio-cache:list'),
   clearAudioCache: () => ipcRenderer.invoke('audio-cache:clear'),
-  prefetchAudioCache: (songIds: string[]) => ipcRenderer.invoke('audio-cache:prefetch', songIds),
   prefetchQueueOnStartup: () => ipcRenderer.invoke('audio-cache:prefetch-queue'),
 
   // 窗口控制
@@ -145,11 +132,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
   appSaveDone: () => {
     ipcRenderer.send('app:save-done')
   },
+  // 关闭到托盘对话框
+  onShowCloseToTrayDialog: (cb: () => void) => {
+    ipcRenderer.on('dialog:show-close-to-tray', () => cb())
+  },
+  sendCloseToTrayResult: (result: { action: string; remember: boolean }) => {
+    ipcRenderer.send('dialog:close-to-tray-result', result)
+  },
+  setLoginPhase: (inLogin: boolean) => {
+    ipcRenderer.send('app:set-login-phase', inLogin)
+  },
 
   // 打开开发者工具
   openDevTools: () => ipcRenderer.invoke('window:open-devtools'),
   // 打开 OBS 样式设置窗口
   openStyleWindow: (port: number) => ipcRenderer.invoke('window:open-style', port),
+
+  // 自动更新
+  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+  installUpdate: () => ipcRenderer.invoke('updater:install'),
+  onUpdateStatus: (cb: (status: unknown) => void) => {
+    ipcRenderer.on('updater:status', (_, s) => cb(s))
+  },
 
   // 直播管理
   liveGetRoomInfo: (uid: number) => ipcRenderer.invoke('live:get-room-info', uid),
@@ -160,8 +165,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   liveGetAreaList: () => ipcRenderer.invoke('live:get-area-list'),
   liveStart: (roomId: number, areaId: number) => ipcRenderer.invoke('live:start', roomId, areaId),
   liveStop: (roomId: number) => ipcRenderer.invoke('live:stop', roomId),
-  getLiveArea: () => ipcRenderer.invoke('settings:get-live-area'),
-  setLiveArea: (parentAreaIdx: number, subAreaId: number) => ipcRenderer.invoke('settings:set-live-area', parentAreaIdx, subAreaId),
 
   // blivechat 身份码
   fetchIdentityCode: () => ipcRenderer.invoke('auth:fetch-identity-code'),
@@ -169,7 +172,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   injectCssToBlivechatFrame: (css: string) => ipcRenderer.invoke('danmaku:inject-css', css),
   // 表情包图片缓存
   cacheEmoticonImages: (packages: any[]) => ipcRenderer.invoke('emoticon:cache-images', packages),
-  clearEmoticonCache: () => ipcRenderer.invoke('emoticon:clear-cache'),
 
   // OBS 叠加层 - 广播数据到 WebSocket 客户端
   obsBroadcastLyric: (text: string, translation: string) => ipcRenderer.send('obs:broadcast-lyric', { text, translation }),
@@ -180,8 +182,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // OBS 叠加层
   getObsPort: () => ipcRenderer.invoke('obs-overlay:get-port'),
-  getObsStyle: (page: string) => ipcRenderer.invoke('obs-overlay:get-style', page),
-  saveObsStyle: (page: string, config: Record<string, unknown>) => ipcRenderer.invoke('obs-overlay:save-style', page, config),
   toggleObsOverlay: (enabled: boolean) => ipcRenderer.invoke('obs-overlay:toggle', enabled),
   startObsIfEnabled: () => ipcRenderer.invoke('obs-overlay:start-if-enabled'),
 
@@ -206,6 +206,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onDanmakuWindowClosed: (cb: () => void) => {
     ipcRenderer.on('danmaku-window:closed', () => cb())
+  },
+  onDanmakuWindowOpened: (cb: () => void) => {
+    ipcRenderer.on('danmaku-window:opened', () => cb())
   },
   setMousePassthrough: (passthrough: boolean) => ipcRenderer.invoke('danmaku-window:set-mouse-passthrough', passthrough),
 })

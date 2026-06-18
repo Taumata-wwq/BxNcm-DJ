@@ -55,8 +55,15 @@
 - 无边框自定义标题栏（最小化 / 最大化 / 关闭）
 - 窗口置顶 / 可缩放切换
 - 窗口位置和大小记忆
+- 关闭到系统托盘（可配置，首次提示记忆）
+- 托盘右键菜单：快速切换弹幕弹窗、固定/解锁、OBS 样式设置、窗口居中、检查更新
 - 明暗主题切换
 - 自定义主题色
+
+### 其他功能
+
+- 自动更新检查（基于 GitHub Releases）
+- 窗口居中到屏幕正中间
 
 ### 键盘快捷键
 
@@ -94,6 +101,7 @@
 | 构建     | Vite 6 + vite-plugin-electron |
 | 语言     | TypeScript 5.7                |
 | 打包     | electron-builder (NSIS)       |
+| 更新     | electron-updater (GitHub Releases) |
 | OBS 通信 | WebSocket (ws)                |
 | 弹幕     | B站直播 WebSocket 协议 + blivechat |
 
@@ -163,7 +171,7 @@ BxNcm-DJ/
 │   │   │   ├── danmaku.ipc.ts    # 弹幕连接 + 表情包缓存
 │   │   │   ├── live.ipc.ts       # 直播管理
 │   │   │   ├── player.ipc.ts     # 播放核心
-│   │   │   ├── playlist.ipc.ts   # 队列 + 收藏 + 空闲歌单
+│   │   │   ├── playlist.ipc.ts   # 队列 + 空闲歌单
 │   │   │   └── settings.ipc.ts   # 设置读写 + 数据重置
 │   │   ├── services/             # 核心服务
 │   │   │   ├── danmaku/
@@ -188,7 +196,9 @@ BxNcm-DJ/
 │   │   │   ├── auto-login.ts     # 自动登录
 │   │   │   ├── emoticon-cache.ts # 表情包图片缓存
 │   │   │   ├── live-manager.ts   # 直播管理
-│   │   │   └── store.ts          # 持久化存储（JSON 文件）
+│   │   │   ├── store.ts          # 持久化存储（JSON 文件）
+│   │   │   ├── tray.ts           # 系统托盘（自定义 BrowserWindow 菜单）
+│   │   │   └── updater.ts        # 自动更新服务
 │   │   └── utils/                # 主进程工具函数
 │   │       ├── cookie.ts         # Cookie 管理
 │   │       ├── fetch.ts          # HTTP 请求封装
@@ -202,8 +212,7 @@ BxNcm-DJ/
 │   │   │       └── danmaku.css   # 弹幕默认 CSS 样式
 │   │   ├── components/
 │   │   │   ├── chat/             # 弹幕相关
-│   │   │   │   ├── DanmakuIframe.vue     # blivechat iframe 嵌入
-│   │   │   │   └── constants.ts          # 弹幕消息类型常量
+│   │   │   │   └── DanmakuIframe.vue     # blivechat iframe 嵌入
 │   │   │   ├── left-sidebar/     # 左侧边栏
 │   │   │   │   ├── SidebarTabs.vue       # 标签页切换
 │   │   │   │   ├── AccountPanel.vue      # 账户信息
@@ -219,6 +228,8 @@ BxNcm-DJ/
 │   │   │   │   └── SongInfo.vue          # 歌曲信息
 │   │   │   ├── settings/         # 设置
 │   │   │   │   ├── SettingsModal.vue     # 设置弹窗
+│   │   │   │   ├── CloseToTrayDialog.vue # 关闭到托盘对话框
+│   │   │   │   ├── UpdateNotificationDialog.vue # 更新通知对话框
 │   │   │   │   ├── ColorPicker.vue       # 颜色选择器
 │   │   │   │   └── ConfirmDialog.vue     # 确认对话框
 │   │   │   └── titlebar/
@@ -228,7 +239,7 @@ BxNcm-DJ/
 │   │   │   ├── auth.store.ts     # 认证状态
 │   │   │   ├── danmaku.store.ts  # 弹幕状态
 │   │   │   ├── player.store.ts   # 播放器状态
-│   │   │   └── playlist.store.ts # 播放列表 + 收藏状态
+│   │   │   └── playlist.store.ts # 播放列表状态
 │   │   ├── views/                # 页面视图
 │   │   │   ├── LoginView.vue     # 登录页（双平台扫码）
 │   │   │   └── MainView.vue      # 主界面
@@ -236,9 +247,9 @@ BxNcm-DJ/
 │   │   │   └── index.ts          # 路由配置（Memory History）
 │   │   ├── App.vue               # 根组件（启动状态机 + 关闭前保存）
 │   │   └── main.ts               # Vue 应用入口
+│   ├── env.d.ts                  # 全局类型声明（window.electronAPI 等）
 │   └── shared/                   # 主进程与渲染进程共享
 │       ├── types/
-│       │   ├── index.ts          # 导出汇总
 │       │   ├── settings.ts       # 设置类型定义
 │       │   ├── danmaku.ts        # 弹幕类型定义
 │       │   ├── player.ts         # 播放器类型定义
@@ -246,8 +257,7 @@ BxNcm-DJ/
 │       ├── constants/
 │       │   └── defaults.ts       # 默认设置值
 │       └── utils/
-│           ├── audio.ts          # 音频工具函数
-│           └── time.ts           # 时间格式化
+│           └── audio.ts          # 音频工具函数
 ├── build/                        # 构建资源（图标）
 │   └── icon.ico
 ├── scripts/
@@ -256,6 +266,9 @@ BxNcm-DJ/
 ├── vite.config.ts                # Vite 构建配置
 ├── tsconfig.json                 # TypeScript 配置
 ├── tsconfig.node.json            # Vite 配置的 TS 配置
+├── index.html                    # Vite 入口 HTML
+├── .gitignore
+├── .npmrc                        # npm registry 镜像配置
 └── package.json
 ```
 
@@ -351,7 +364,7 @@ npm run build
 
 - 目标平台：Windows (x64, NSIS 安装包)
 - 压缩级别：maximum
-- ASAR 打包：启用（ws 和 qrcode 模块解包）
+- ASAR 打包：启用（ws、qrcode、electron-updater 模块解包）
 - 安装选项：自定义安装路径、桌面快捷方式、开始菜单
 
 ### 构建产物精简

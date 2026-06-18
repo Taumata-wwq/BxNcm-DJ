@@ -42,7 +42,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
   ipcMain.handle('window:open-style', (_event, port: number) => {
     const DEFAULT_WIDTH = 1200
     const DEFAULT_HEIGHT = 700
-    const MIN_WIDTH = 450
+    const MIN_WIDTH = 385
     const MIN_HEIGHT = 450
 
     // 从存储读取之前的位置/大小

@@ -126,25 +126,35 @@ export function registerAuthIpc(mainWindow: BrowserWindow) {
     }
     try {
       const body = `action=1&csrf_token=${encodeURIComponent(csrfToken)}&csrf=${encodeURIComponent(csrfToken)}`
-      const res = await fetchWithTimeout('https://api.live.bilibili.com/xlive/open-platform/v1/common/operationOnBroadcastCode', {
-        method: 'POST',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Cookie': cookieStr,
-          'Origin': 'https://link.bilibili.com',
-          'Referer': 'https://link.bilibili.com/p/center/index',
-        },
-        body
-      })
-      const data = await res.json()
-      if (data.code === 0 && data.data?.code) {
-        return { success: true, code: data.data.code }
-      } else {
-        return { success: false, message: data.message || '获取失败' }
+
+      // 最多重试 3 次
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await fetchWithTimeout('https://api.live.bilibili.com/xlive/open-platform/v1/common/operationOnBroadcastCode', {
+            method: 'POST',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Cookie': cookieStr,
+              'Origin': 'https://link.bilibili.com',
+              'Referer': 'https://link.bilibili.com/p/center/index',
+            },
+            body
+          })
+          const data = await res.json()
+          if (data.code === 0 && data.data?.code) {
+            return { success: true, code: data.data.code }
+          } else {
+            console.warn(`[AuthIPC] 获取身份码第 ${attempt + 1}/3 次返回异常:`, data.message)
+            if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)))
+          }
+        } catch (fetchErr) {
+          console.error(`[AuthIPC] 获取身份码第 ${attempt + 1}/3 次失败:`, (fetchErr as Error).message)
+          if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)))
+        }
       }
+      return { success: false, message: '获取失败（已重试3次）' }
     } catch (e) {
-      console.error('[AuthIPC] 获取身份码失败:', (e as Error).message)
       return { success: false, message: (e as Error).message }
     }
   })

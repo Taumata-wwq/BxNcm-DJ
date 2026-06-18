@@ -211,4 +211,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // blivechat
   identityCode: '',
   blivechatLang: 'zh',
+  // 窗口行为
+  closeToTray: true, // 默认关闭时收起到托盘
+  // 自动更新
+  autoUpdate: true, // 默认启用自动更新
 }

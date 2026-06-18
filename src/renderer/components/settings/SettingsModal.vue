@@ -69,6 +69,13 @@
               <span class="toggle-text">{{ isResizable ? '可调整' : '已固定' }}</span>
             </label>
           </div>
+          <div class="setting-row">
+            <span>关闭时收起到托盘</span>
+            <label class="toggle-label">
+              <input type="checkbox" :checked="settingsStore.settings.closeToTray" @change="toggleCloseToTray" />
+              <span class="toggle-text">{{ settingsStore.settings.closeToTray ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
         </div>
 
         </div><!-- end basic -->
@@ -540,6 +547,50 @@
         <!-- ==================== 关于 ==================== -->
         <div v-show="activeCategory === 'about'">
 
+        <!-- 关于 -->
+        <div id="section-about" class="section">
+          <h3>关于</h3>
+          <div class="about-header">
+            <span class="about-text">BxNcm DJ v{{ appVersion }} by Taumata<br/>技术栈: Vue3 + Electron + TypeScript</span>
+            <div class="about-actions">
+              <button class="btn dev-btn" @click="openDevTools">Dev</button>
+              <button class="btn reset-data-btn" @click="resetAllData">重置数据</button>
+            </div>
+          </div>
+          <!-- 致谢 -->
+          <div class="about-thanks">
+            <span class="thanks-label">致谢:</span>
+            <span class="thanks-text">blivechat</span>
+          </div>
+          <!-- 自动更新 -->
+          <div class="setting-row" style="margin-top: 10px;">
+            <span>自动检查更新</span>
+            <label class="toggle-label">
+              <input type="checkbox" :checked="settingsStore.settings.autoUpdate" @change="toggleAutoUpdate" />
+              <span class="toggle-text">{{ settingsStore.settings.autoUpdate ? '已开启' : '已关闭' }}</span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <span>检查更新</span>
+            <div class="update-actions">
+              <button class="btn" @click="checkForUpdates" :disabled="updateStatus === 'checking' || updateStatus === 'downloading'">
+                {{ updateStatus === 'checking' ? '检查中...' : '检查更新' }}
+              </button>
+              <span v-if="updateStatus === 'available'" class="update-info">
+                发现新版本 v{{ updateVersion }}
+                <button class="btn" @click="downloadUpdate" style="margin-left: 6px;">下载更新</button>
+              </span>
+              <span v-if="updateStatus === 'not-available'" class="update-info">{{ updateMessage || '已是最新版本' }}</span>
+              <span v-if="updateStatus === 'downloading'" class="update-info">下载中 {{ updateProgress }}%</span>
+              <span v-if="updateStatus === 'downloaded'" class="update-info">
+                下载完成
+                <button class="btn" @click="installUpdate" style="margin-left: 6px;">立即安装</button>
+              </span>
+              <span v-if="updateStatus === 'error'" class="update-info update-error">{{ updateMessage || '检查更新失败' }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- 日志 -->
         <div id="section-log" class="section">
           <h3>日志</h3>
@@ -549,23 +600,6 @@
           </div>
         </div>
 
-        <!-- 致谢 -->
-        <div id="section-thanks" class="section">
-          <h3>致谢</h3>
-          <p class="thanks-text">blivechat</p>
-        </div>
-
-        <!-- 关于 -->
-        <div id="section-about" class="section">
-          <h3>关于</h3>
-          <div class="about-header">
-            <span class="about-text">BxNcm DJ v1.1.1 by Taumata<br/>技术栈: Vue3 + Electron + TypeScript</span>
-            <div class="about-actions">
-              <button class="btn dev-btn" @click="openDevTools">Dev</button>
-              <button class="btn reset-data-btn" @click="resetAllData">重置数据</button>
-            </div>
-          </div>
-        </div>
         </div><!-- end about -->
       </div><!-- end modal-body -->
       </div><!-- end modal-layout -->
@@ -598,6 +632,9 @@ const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const danmakuStore = useDanmakuStore()
 
+// 版本号（由 vite 注入的全局常量）
+const appVersion = __APP_VERSION__
+
 const cacheSongs = ref<any[]>([])
 const alwaysOnTop = ref(false)
 const isResizable = ref(true)
@@ -613,6 +650,12 @@ const activeCategory = ref('basic')
 const idCodeLoading = ref(false)
 let navLocked = false
 let navLockTimer: ReturnType<typeof setTimeout> | null = null
+
+// 自动更新状态
+const updateStatus = ref<string>('')  // '', 'checking', 'available', 'not-available', 'downloading', 'downloaded', 'error'
+const updateVersion = ref<string>('')
+const updateProgress = ref<number>(0)
+const updateMessage = ref<string>('')
 
 /** 计算 blivechat 地址：基于身份码 + 完整弹幕设置 */
 const blivechatUrl = computed(() => {
@@ -641,6 +684,8 @@ const blivechatUrl = computed(() => {
   if (s.blockUsers) params.set('blockUsers', s.blockUsers)
   // 调试
   params.set('showDebugMessages', s.showDebugMessages ? 'true' : 'false')
+  // 通过服务器转发消息（推荐，减少连接数）
+  params.set('relayMessagesByServer', 'true')
   return `https://blive.chat/room/${code}?${params.toString()}`
 })
 
@@ -668,9 +713,8 @@ const sectionToCategory: Record<string, string> = {
   'danmaku-advanced': 'danmaku',
   'obs-overlay': 'obs',
   'danmaku-capture': 'obs',
-  'log': 'about',
-  'thanks': 'about',
   'about': 'about',
+  'log': 'about',
 }
 
 // 每个分类的第一个 section（用于 switchCategory 时滚动定位）
@@ -680,7 +724,7 @@ const categoryFirstSection: Record<string, string> = {
   'songs': 'song-request',
   'danmaku': 'danmaku-general',
   'obs': 'obs-overlay',
-  'about': 'log',
+  'about': 'about',
 }
 
 /** 点击分类标签，切换视图并滚动到该分类第一个 section */
@@ -750,6 +794,12 @@ onMounted(async () => {
     settingsStore.settings.danmakuWindow = false
   })
 
+  // 监听弹幕窗口打开（来自托盘菜单打开）
+  window.electronAPI.onDanmakuWindowOpened?.(() => {
+    danmakuWindowOpen.value = true
+    settingsStore.settings.danmakuWindow = true
+  })
+
   // 如果 OBS 服务已开启但端口未获取到，重试一次
   if (obsPort.value === 0 && settingsStore.settings.obsOverlayEnabled) {
     setTimeout(async () => {
@@ -774,6 +824,15 @@ onMounted(async () => {
       }
     }, 800)
   }
+
+  // 监听自动更新状态
+  window.electronAPI.onUpdateStatus?.((s: any) => {
+    updateStatus.value = s.status
+    if (s.version) updateVersion.value = s.version
+    if (s.percent !== undefined) updateProgress.value = s.percent
+    if (s.error) updateMessage.value = s.error
+    if (s.message) updateMessage.value = s.message
+  })
 })
 
 // 日志列表自动滚动到底部
@@ -1060,6 +1119,62 @@ async function openDevTools() {
     console.error('[SettingsModal] openDevTools failed:', e)
   }
 }
+
+// ===== 自动更新 =====
+
+async function checkForUpdates() {
+  updateStatus.value = 'checking'
+  updateMessage.value = ''
+  try {
+    const result = await window.electronAPI.checkForUpdates()
+    if (result.status === 'available') {
+      updateStatus.value = 'available'
+      updateVersion.value = result.version || ''
+    } else if (result.status === 'not-available') {
+      updateStatus.value = 'not-available'
+      updateMessage.value = result.message || '当前已是最新版本'
+    } else if (result.status === 'error') {
+      updateStatus.value = 'error'
+      updateMessage.value = result.error || '检查更新失败'
+    }
+  } catch (e) {
+    updateStatus.value = 'error'
+    updateMessage.value = (e as Error).message
+  }
+}
+
+async function downloadUpdate() {
+  updateStatus.value = 'downloading'
+  updateProgress.value = 0
+  try {
+    const result = await window.electronAPI.downloadUpdate()
+    if (!result.success) {
+      updateStatus.value = 'error'
+      updateMessage.value = result.error || '下载失败'
+    }
+  } catch (e) {
+    updateStatus.value = 'error'
+    updateMessage.value = (e as Error).message
+  }
+}
+
+async function installUpdate() {
+  try {
+    await window.electronAPI.installUpdate()
+  } catch (e) {
+    console.error('[SettingsModal] installUpdate failed:', e)
+  }
+}
+
+// ===== 窗口行为 =====
+
+function toggleCloseToTray() {
+  settingsStore.settings.closeToTray = !settingsStore.settings.closeToTray
+}
+
+function toggleAutoUpdate() {
+  settingsStore.settings.autoUpdate = !settingsStore.settings.autoUpdate
+}
 </script>
 
 <style scoped>
@@ -1151,6 +1266,15 @@ span.status-text { text-align: right; min-width: 50px; flex: none; }
 .about-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .dev-btn { display: flex; }
 .reset-data-btn { display: flex; }
+
+/* 自动更新 */
+.update-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.update-info { font-size: 11px; color: var(--text-secondary); }
+.update-error { color: #e74c3c; }
+
+/* 关于-致谢 */
+.about-thanks { margin-top: 10px; display: flex; align-items: center; gap: 6px; }
+.thanks-label { font-size: 11px; color: var(--text-muted); }
 
 /* 缓存列表 */
 .cache-list { height: 180px; overflow-y: auto; background: var(--bg-primary); border: 1px solid var(--border); scrollbar-width: none; }

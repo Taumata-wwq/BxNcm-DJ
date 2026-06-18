@@ -15,7 +15,6 @@ interface PlaylistCacheEntry {
 
 interface StoreSchema {
   settings: Record<string, string>       // key → value (app_前缀)
-  favorites: string[]                    // 已收藏 songId 列表
   history: HistoryEntry[]                // 播放历史
   cache: SongCacheEntry[]                // 歌曲信息缓存
   playlistCache: PlaylistCacheEntry[]    // 歌单/收藏夹缓存（最近各10条）
@@ -28,6 +27,9 @@ interface BootData {
   alwaysOnTop: boolean
   resizable: boolean
   windowPosition: { x: number; y: number; width: number; height: number } | null
+  closeToTray: boolean
+  closeToTrayPrompt: boolean
+  autoUpdate: boolean
 }
 
 interface HistoryEntry {
@@ -57,7 +59,7 @@ function parseJsonStr(raw: string | undefined): string | null {
 }
 
 class AppStore {
-  private data: StoreSchema = { settings: {}, favorites: [], history: [], cache: [], playlistCache: [], lastRefreshTime: {} }
+  private data: StoreSchema = { settings: {}, history: [], cache: [], playlistCache: [], lastRefreshTime: {} }
   private filePath: string
   private saveTimer: ReturnType<typeof setTimeout> | null = null
   private dirty = false
@@ -81,7 +83,6 @@ class AppStore {
         const raw = readFileSync(this.filePath, 'utf-8')
         const parsed = JSON.parse(raw)
         this.data.settings = parsed.settings ?? {}
-        this.data.favorites = parsed.favorites ?? []
         this.data.history = parsed.history ?? []
         this.data.cache = parsed.cache ?? []
         this.data.playlistCache = parsed.playlistCache ?? []
@@ -90,7 +91,7 @@ class AppStore {
       }
     } catch (e) {
       console.error('[Store] 加载失败，使用空数据:', (e as Error).message)
-      this.data = { settings: {}, favorites: [], history: [], cache: [], playlistCache: [], lastRefreshTime: {} }
+      this.data = { settings: {}, history: [], cache: [], playlistCache: [], lastRefreshTime: {} }
     }
   }
 
@@ -145,27 +146,6 @@ class AppStore {
 
   setBatch(entries: Array<[string, string]>): void {
     for (const [k, v] of entries) this.data.settings[k] = v
-    this.markDirty()
-  }
-
-  // ==================== 收藏操作 ====================
-
-  getFavorites(): SongItem[] {
-    return this.data.favorites
-      .map(id => this.data.cache.find(e => e.songId === id))
-      .filter((e): e is SongCacheEntry => !!e)
-      .map(e => e.data)
-  }
-
-  addFavorite(songId: string): void {
-    if (!this.data.favorites.includes(songId)) {
-      this.data.favorites.push(songId)
-      this.markDirty()
-    }
-  }
-
-  removeFavorite(songId: string): void {
-    this.data.favorites = this.data.favorites.filter(id => id !== songId)
     this.markDirty()
   }
 
@@ -310,28 +290,6 @@ class AppStore {
     return Math.max(2, Math.min(5, isNaN(v) ? 3 : v))
   }
 
-  /** 获取上次保存的直播分区选择 */
-  getLiveArea(): { parentAreaIdx: number; subAreaId: number } | null {
-    const p = this.data.settings['liveParentAreaIdx']
-    const s = this.data.settings['liveSubAreaId']
-    if (p !== undefined && s !== undefined) {
-      const parentAreaIdx = parseInt(p, 10)
-      const subAreaId = parseInt(s, 10)
-      if (!isNaN(parentAreaIdx) && !isNaN(subAreaId)) {
-        return { parentAreaIdx, subAreaId }
-      }
-    }
-    return null
-  }
-
-  /** 保存直播分区选择（立即落盘，不依赖防抖） */
-  setLiveArea(parentAreaIdx: number, subAreaId: number): void {
-    this.data.settings['liveParentAreaIdx'] = String(parentAreaIdx)
-    this.data.settings['liveSubAreaId'] = String(subAreaId)
-    this.dirty = true
-    this.saveNow()
-  }
-
   // ==================== 分区读取（三阶段加载） ====================
 
   /** 第1部分：启动数据 — 主题色、窗口信息（加载界面启用时最先读取） */
@@ -340,6 +298,9 @@ class AppStore {
     const rawAccent = this.data.settings['app_accentColor']
     const rawOnTop = this.data.settings['app_alwaysOnTop']
     const rawResizable = this.data.settings['app_resizable']
+    const rawCloseToTray = this.data.settings['app_closeToTray']
+    const rawCloseToTrayPrompt = this.data.settings['app_closeToTrayPrompt']
+    const rawAutoUpdate = this.data.settings['app_autoUpdate']
     const rawPos = this.data.settings['window_position']
     let windowPosition: BootData['windowPosition'] = null
     if (rawPos) {
@@ -350,13 +311,16 @@ class AppStore {
       accentColor: parseJsonStr(rawAccent) || '#00b5e5',
       alwaysOnTop: rawOnTop === 'true' || rawOnTop === '"true"',
       resizable: rawResizable !== 'false' && rawResizable !== '"false"',
+      closeToTray: rawCloseToTray !== 'false' && rawCloseToTray !== '"false"', // 默认 true
+      closeToTrayPrompt: rawCloseToTrayPrompt !== 'false' && rawCloseToTrayPrompt !== '"false"', // 默认 true
+      autoUpdate: rawAutoUpdate !== 'false' && rawAutoUpdate !== '"false"', // 默认 true
       windowPosition,
     }
   }
 
   /** 第2部分：应用数据 — 除 boot/style 外的软件本体设置 */
   loadAppData(): Record<string, string> {
-    const bootKeys = new Set(['app_theme', 'app_accentColor', 'app_alwaysOnTop', 'app_resizable', 'window_position'])
+    const bootKeys = new Set(['app_theme', 'app_accentColor', 'app_alwaysOnTop', 'app_resizable', 'app_closeToTray', 'app_closeToTrayPrompt', 'app_autoUpdate', 'window_position'])
     const result: Record<string, string> = {}
     for (const [k, v] of Object.entries(this.data.settings)) {
       if (!bootKeys.has(k) && !k.startsWith('obs_')) {
@@ -423,7 +387,6 @@ class AppStore {
 
     // 清空所有数据
     this.data.settings = {}
-    this.data.favorites = []
     this.data.history = []
     this.data.cache = []
     this.data.playlistCache = []

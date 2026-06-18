@@ -20,7 +20,7 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
-              external: ['ws', 'qrcode']
+              external: ['ws', 'qrcode', 'electron-updater']
             }
           }
         }

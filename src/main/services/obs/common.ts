@@ -59,6 +59,15 @@ body.overlay-mode #overlay { width: 100vw; height: 100vh; }
 .song-requester { white-space: normal; word-break: break-word; max-width: 90%; }
 
 /* ---------- /style 设置页面 ---------- */
+/* 隐藏 html 元素的原生滚动条（保留滚轮滚动功能） */
+html { overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+html::-webkit-scrollbar { display: none; }
+html::-webkit-scrollbar-track,
+html::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb:hover,
+html::-webkit-scrollbar-thumb:active,
+html::-webkit-scrollbar-corner { display: none; }
+
 body.style-mode {
   font-family: -apple-system, 'Microsoft YaHei', sans-serif;
   background: #1e1e1e;
@@ -121,6 +130,8 @@ body.style-mode .style-panel::-webkit-scrollbar-corner {
 }
 @media (max-width: 599px) {
   .preview-wrap { display: none; }
+  .section-body { justify-content: center; }
+  .style-panel { margin: 0 auto; }
 }
 .preview-iframe { width: 100%; height: 100%; border: none; }
 .obs-url-bar {

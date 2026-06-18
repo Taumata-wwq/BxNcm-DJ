@@ -18,7 +18,6 @@ interface ElectronAPI {
   getEmoticons: (roomId: number) => Promise<{ code: number; message: string; data: any }>
   getUserEmoticons: () => Promise<{ code: number; message: string; packages: any[] }>
   getAllEmoticons: () => Promise<{ code: number; message: string; packages: any[] }>
-  getCachedEmoticons: (roomId: number) => Promise<{ code: number; roomEmoticons: any; userEmoticons: any; allEmoticons: any; fromCache: boolean }>
   onDanmakuStatusChanged: (cb: (status: import('@shared/types/danmaku').DanmakuStatus) => void) => void
   onDanmakuViewerJoin: (cb: (viewer: import('@shared/types/danmaku').ViewerInfo) => void) => void
   onDanmakuViewerListSync: (cb: (viewers: Array<import('@shared/types/danmaku').ViewerInfo>) => void) => void
@@ -41,9 +40,6 @@ interface ElectronAPI {
   playlistAddSong: (song: any) => Promise<void>
   playlistInsertTop: (song: any) => Promise<void>
   onPlaylistUpdated: (cb: (list: any[]) => void) => void
-  favoriteAdd: (song: any) => Promise<void>
-  favoriteRemove: (songId: string) => Promise<void>
-  getFavorites: () => Promise<any[]>
   getIdlePlaylistInfo: () => Promise<{ name: string; owner: string; source: string } | null>
   getIdleQueueStartIndex: () => Promise<number>
   refreshIdlePlaylist: (neteaseId: string, bilibiliId: string) => Promise<{ success: boolean; count?: number; info?: { name: string; owner: string; source: string } | null; unchanged: boolean; cached?: boolean; queue?: any[]; firstSong?: any }>
@@ -54,7 +50,7 @@ interface ElectronAPI {
   getSettings: () => Promise<any>
   saveSettings: (settings: any) => Promise<{ success: boolean }>
   // 启动加载
-  loadBootData: () => Promise<{ theme: 'dark' | 'light'; accentColor: string; alwaysOnTop: boolean; resizable: boolean; windowPosition: { x: number; y: number; width: number; height: number } | null }>
+  loadBootData: () => Promise<{ theme: 'dark' | 'light'; accentColor: string; alwaysOnTop: boolean; resizable: boolean; closeToTray: boolean; closeToTrayPrompt: boolean; autoUpdate: boolean; windowPosition: { x: number; y: number; width: number; height: number } | null }>
   loadAppData: () => Promise<Record<string, string>>
   getIdleQueueSize: () => Promise<number>
   setIdleQueueSize: (size: number) => Promise<{ success: boolean }>
@@ -70,8 +66,6 @@ interface ElectronAPI {
   logoutNetease: () => Promise<void>
   onAuthStateChanged: (cb: (state: any) => void) => void
   searchSong: (keyword: string) => Promise<any>
-  getRecentCache: () => Promise<any[]>
-  clearCache: () => Promise<{ success: boolean }>
   minimizeWindow: () => Promise<void>
   maximizeWindow: () => Promise<void>
   closeWindow: () => Promise<void>
@@ -83,8 +77,17 @@ interface ElectronAPI {
   onBeforeClose: (cb: () => void) => void
   appSaveDone: () => void
   appRelaunch: () => Promise<void>
+  // 关闭到托盘对话框
+  onShowCloseToTrayDialog: (cb: () => void) => void
+  sendCloseToTrayResult: (result: { action: string; remember: boolean }) => void
+  setLoginPhase: (inLogin: boolean) => void
   openDevTools: () => Promise<void>
   openStyleWindow: (port: number) => Promise<boolean>
+  // 自动更新
+  checkForUpdates: () => Promise<{ status: string; version?: string; message?: string; error?: string }>
+  downloadUpdate: () => Promise<{ success: boolean; error?: string }>
+  installUpdate: () => Promise<boolean>
+  onUpdateStatus: (cb: (status: { status: string; version?: string; percent?: number; error?: string; message?: string }) => void) => void
   liveGetRoomInfo: (uid: number) => Promise<any>
   liveGetRoomInfoByRoom: (roomId: number) => Promise<any>
   liveGetFollowerCount: (vmid: number) => Promise<{ code: number; follower: number }>
@@ -93,15 +96,12 @@ interface ElectronAPI {
   liveGetAreaList: () => Promise<any>
   liveStart: (roomId: number, areaId: number) => Promise<any>
   liveStop: (roomId: number) => Promise<any>
-  getLiveArea: () => Promise<{ parentAreaIdx: number; subAreaId: number } | null>
-  setLiveArea: (parentAreaIdx: number, subAreaId: number) => Promise<{ success: boolean }>
   // blivechat 身份码
   fetchIdentityCode: () => Promise<{ success: boolean; code?: string; message?: string }>
   // blivechat CSS 注入（通过主进程在子 frame 中执行 JavaScript）
   injectCssToBlivechatFrame: (css: string) => Promise<{ success: boolean; error?: string }>
   // 表情包图片缓存
   cacheEmoticonImages: (packages: any[]) => Promise<{ success: boolean; urlMap: Record<string, string> }>
-  clearEmoticonCache: () => Promise<{ success: boolean }>
   // OBS 叠加层 - 广播数据
   obsBroadcastLyric: (text: string, translation: string) => void
   obsBroadcastQueue: (songs: Array<{ index: number; title: string; artist: string; requesterName: string }>, currentIndex: number) => void
@@ -112,7 +112,6 @@ interface ElectronAPI {
   startObsIfEnabled: () => Promise<{ port: number; error?: string }>
   getAudioCacheList: () => Promise<any[]>
   clearAudioCache: () => Promise<void>
-  prefetchAudioCache: (songIds: string[]) => Promise<{ success: boolean; reason?: string }>
   prefetchQueueOnStartup: () => Promise<void>
   // 弹幕窗口
   openDanmakuWindow: (url: string, css: string, bgColor?: string, opacity?: number) => Promise<boolean>
@@ -129,6 +128,7 @@ interface ElectronAPI {
   onDanmakuWindowConfig: (cb: (config: { url: string; roomId: number; bgColor: string; css: string; borderColor: string; showBorder: boolean; isFixed: boolean; connected: boolean }) => void) => void
   onDanmakuWindowFixedChanged: (cb: (fixed: boolean) => void) => void
   onDanmakuWindowClosed: (cb: () => void) => void
+  onDanmakuWindowOpened: (cb: () => void) => void
   registerDanmakuFixShortcut: (shortcut: string) => Promise<void>
   setMousePassthrough: (passthrough: boolean) => Promise<void>
 }

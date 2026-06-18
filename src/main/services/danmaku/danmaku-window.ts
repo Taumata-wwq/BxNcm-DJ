@@ -221,6 +221,22 @@ function sendToMainWindow(channel: string, ...args: unknown[]) {
   }
 }
 
+// ===== 辅助：从 store 同步 showBorder =====
+
+function syncShowBorderFromStore() {
+  try {
+    const raw = store.get('app_danmakuWindowShowBorder')
+    if (raw !== undefined && raw !== null) {
+      const parsed = JSON.parse(raw)
+      if (typeof parsed === 'boolean') {
+        showBorder = parsed
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 // ===== 公共 API =====
 
 export function openDanmakuWindow(url: string, css: string, bgColor?: string, opacity?: number): boolean {
@@ -228,6 +244,15 @@ export function openDanmakuWindow(url: string, css: string, bgColor?: string, op
   danmakuCss = css
   if (bgColor !== undefined) danmakuBgColor = bgColor
   if (opacity !== undefined) danmakuOpacity = Math.max(5, Math.min(100, opacity))
+
+  // 同步 showBorder 状态，避免托盘等入口打开窗口时使用默认值 true
+  syncShowBorderFromStore()
+
+  // 持久化到 store，确保托盘等入口能读取到最新配置
+  store.set('app_danmakuWindowUrl', url)
+  store.set('app_danmakuWindowCss', css)
+  store.set('app_danmakuWindowBgColor', danmakuBgColor)
+  store.set('app_danmakuWindowOpacity', String(danmakuOpacity))
 
   if (danmakuWin && !danmakuWin.isDestroyed()) {
     danmakuWin.setOpacity(danmakuOpacity / 100)

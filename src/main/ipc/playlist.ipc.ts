@@ -146,22 +146,6 @@ export function registerPlaylistIpc(mainWindow: BrowserWindow) {
     return { success: true }
   })
 
-  // 收藏
-  ipcMain.handle('favorite:add', (_, song: any) => {
-    store.addFavorite(song.id)
-    store.setCacheItem(song.id, song)
-    return { success: true }
-  })
-
-  ipcMain.handle('favorite:remove', (_, songId: string) => {
-    store.removeFavorite(songId)
-    return { success: true }
-  })
-
-  ipcMain.handle('favorite:get', () => {
-    return store.getFavorites()
-  })
-
   // 空闲歌单
   ipcMain.handle('idle-playlist:info', () => playlistManager.getIdlePlaylistInfo())
   ipcMain.handle('idle-playlist:queue-start', () => playlistManager.getIdleQueueStartIndex())
@@ -259,16 +243,6 @@ export function registerPlaylistIpc(mainWindow: BrowserWindow) {
     return neteaseApi.searchByKeyword(keyword)
   })
 
-  // 搜索缓存
-  ipcMain.handle('cache:get-recent', () => {
-    return store.getHistory()
-  })
-
-  ipcMain.handle('cache:clear', () => {
-    store.clearCache()
-    return { success: true }
-  })
-
   // idleQueueSize 设置
   ipcMain.handle('settings:get-idle-queue-size', () => store.getIdleQueueSize())
   ipcMain.handle('settings:set-idle-queue-size', (_, size: number) => {
@@ -280,13 +254,6 @@ export function registerPlaylistIpc(mainWindow: BrowserWindow) {
   ipcMain.handle('settings:get-last-idle-source', () => store.getLastIdleSource())
   ipcMain.handle('settings:set-last-idle-source', (_, source: string) => {
     store.setLastIdleSource(source as 'netease' | 'bilibili')
-    return { success: true }
-  })
-
-  // 直播分区持久化
-  ipcMain.handle('settings:get-live-area', () => store.getLiveArea())
-  ipcMain.handle('settings:set-live-area', (_, parentAreaIdx: number, subAreaId: number) => {
-    store.setLiveArea(parentAreaIdx, subAreaId)
     return { success: true }
   })
 }

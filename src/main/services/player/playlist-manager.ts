@@ -278,15 +278,8 @@ class PlaylistManager {
         }
       }
 
-      // 缓存重建后仍无歌曲 → 兜底收藏夹
       if (this.idleList.length === 0) {
-        const favorites = store.getFavorites()
-        if (favorites.length > 0) {
-          this.idleList = [...favorites]
-          this.fillInitialIdleQueue()
-        } else {
-          return null
-        }
+        return null
       }
     }
 

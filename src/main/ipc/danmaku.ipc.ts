@@ -131,50 +131,6 @@ export function registerDanmakuIpc(mainWindow: BrowserWindow) {
     }
   })
 
-  // 弹幕窗口专用：一次性获取所有表情包（优先使用主进程缓存，避免重复请求）
-  ipcMain.handle('danmaku:get-cached-emoticons', async (_, roomId: number) => {
-    try {
-      const roomCacheKey = `room_emoticons:${roomId}`
-      const cachedRoom = getCached(roomCacheKey)
-      const cachedUser = getCached('user_emoticons')
-      const cachedAll = getCached('all_emoticons')
-
-      if (cachedRoom && cachedUser && cachedAll) {
-        return {
-          code: 0,
-          roomEmoticons: cachedRoom,
-          userEmoticons: cachedUser,
-          allEmoticons: cachedAll,
-          fromCache: true,
-        }
-      }
-
-      const [roomResult, userResult, allResult] = await Promise.allSettled([
-        cachedRoom ? Promise.resolve(cachedRoom) : getEmoticons(roomId),
-        cachedUser ? Promise.resolve(cachedUser) : getUserEmoticons(),
-        cachedAll ? Promise.resolve(cachedAll) : getAllEmoticons(),
-      ])
-
-      const roomData = roomResult.status === 'fulfilled' ? roomResult.value : null
-      const userData = userResult.status === 'fulfilled' ? userResult.value : null
-      const allData = allResult.status === 'fulfilled' ? allResult.value : null
-
-      if (roomData?.code === 0) setCache(roomCacheKey, roomData)
-      if (userData?.code === 0) setCache('user_emoticons', userData)
-      if (allData?.code === 0) setCache('all_emoticons', allData)
-
-      return {
-        code: 0,
-        roomEmoticons: roomData,
-        userEmoticons: userData,
-        allEmoticons: allData,
-        fromCache: false,
-      }
-    } catch (e: any) {
-      return { code: -1, message: e.message }
-    }
-  })
-
   // CSS 注入到 blivechat iframe：通过主进程在子 frame 中执行 JavaScript
   ipcMain.handle('danmaku:inject-css', async (_, css: string) => {
     try {
@@ -215,16 +171,6 @@ export function registerDanmakuIpc(mainWindow: BrowserWindow) {
     try {
       const urlMap = await emoticonCache.cachePackageImageUrls(packages)
       return { success: true, urlMap: Object.fromEntries(urlMap) }
-    } catch (e: any) {
-      return { success: false, error: e.message }
-    }
-  })
-
-  // 清除表情包图片缓存
-  ipcMain.handle('emoticon:clear-cache', async () => {
-    try {
-      emoticonCache.clearAll()
-      return { success: true }
     } catch (e: any) {
       return { success: false, error: e.message }
     }

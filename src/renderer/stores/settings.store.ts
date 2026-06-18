@@ -60,6 +60,8 @@ export const useSettingsStore = defineStore('settings', () => {
         settings.value.accentColor = boot.accentColor
         settings.value.alwaysOnTop = boot.alwaysOnTop
         settings.value.resizable = boot.resizable
+        settings.value.closeToTray = boot.closeToTray
+        settings.value.autoUpdate = boot.autoUpdate
         applyTheme(settings.value.theme)
         applyAccent(settings.value.accentColor)
       }

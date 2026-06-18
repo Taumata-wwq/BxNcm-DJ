@@ -48,6 +48,7 @@ import VideoPlayer from '../components/player/VideoPlayer.vue'
 import AudioPlayer from '../components/player/AudioPlayer.vue'
 import ProgressBar from '../components/player/ProgressBar.vue'
 import SettingsModal from '../components/settings/SettingsModal.vue'
+import defaultDanmakuCss from '../assets/styles/danmaku.css?raw'
 
 const authStore = useAuthStore()
 const playlistStore = usePlaylistStore()
@@ -203,8 +204,8 @@ onMounted(async () => {
   })
 
   // ====== 1. 加载基础数据 ======
+  updateLoadingProgress(50, '正在加载基础数据...')
   await playlistStore.loadQueue()
-  await playlistStore.loadFavorites()
   // boot + app + style 数据已在 App.vue initApp 中通过三阶段加载完成
 
   // ====== 2. 注册 IPC 监听器 ======
@@ -216,6 +217,7 @@ onMounted(async () => {
   window.electronAPI.onLogAdd((msg: string) => danmakuStore.addLog(msg))
 
   // ====== 3. 从缓存恢复空闲歌单到队列（快速恢复上次退出时的状态） ======
+  updateLoadingProgress(55, '正在读取空闲歌单...')
   const source = settingsStore.settings.lastIdleSource
   const id = source === 'netease'
     ? settingsStore.settings.neteasePlaylistId
@@ -224,7 +226,7 @@ onMounted(async () => {
   const sourceLabel = source === 'netease' ? '网易云歌单' : 'B站视频列表'
   let firstFromIpc: any = null
 
-  updateLoadingProgress(65, `正在加载${sourceLabel}缓存...`)
+  updateLoadingProgress(60, `正在加载${sourceLabel}缓存...`)
   if (id) {
     try {
       const r3 = await window.electronAPI.loadIdlePlaylistFromCache(source, id)
@@ -236,7 +238,7 @@ onMounted(async () => {
   }
 
   // ====== 4. 异步刷新空闲歌单（CD期内跳过API调用，非CD期自动更新） ======
-  updateLoadingProgress(75, `正在刷新${sourceLabel}...`)
+  updateLoadingProgress(65, `正在刷新${sourceLabel}...`)
   if (id) {
     try {
       const r4 = await window.electronAPI.refreshIdlePlaylistSingle(source, id, false)
@@ -256,7 +258,7 @@ onMounted(async () => {
     : parseBiliFavMediaId(settingsStore.settings.bilibiliFavUrl)
   if (otherId) {
     const otherLabel = otherSource === 'netease' ? '网易云歌单' : 'B站视频列表'
-    updateLoadingProgress(85, `正在预加载${otherLabel}...`)
+    updateLoadingProgress(70, `正在预加载${otherLabel}...`)
     await window.electronAPI.cacheOnlyIdlePlaylist(otherSource, otherId).catch((e: any) => { console.error('[MainView] cacheOnlyIdlePlaylist failed:', e) })
   }
 
@@ -277,14 +279,43 @@ onMounted(async () => {
   // ====== 6. 从设置恢复音量 ======
   playerStore.setVolume(settingsStore.settings.volume)
 
-  // ====== 7. B站直播间自动连接 ======
+  // ====== 7. 启动 OBS 叠加层 HTTP 服务（如果设置中已启用） ======
+  updateLoadingProgress(80, '正在启动 OBS 叠加层服务...')
+  try {
+    const result = await window.electronAPI.startObsIfEnabled()
+  } catch {}
+
+  // ====== 8. 加载直播间弹幕blivechat（3次重试） ======
+  updateLoadingProgress(90, '正在加载直播间弹幕...')
   if (authStore.authState.bilibili) {
     try {
       const roomInfo = await window.electronAPI.getBilibiliLiveRoom()
       if (roomInfo && roomInfo.roomId > 0) {
         settingsStore.settings.roomId = roomInfo.roomId
         danmakuStore.addLog(`自动读取直播间: ${roomInfo.roomId}`)
-        await window.electronAPI.connectDanmaku(roomInfo.roomId)
+
+        // 3次重试连接弹幕
+        let connected = false
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const result = await window.electronAPI.connectDanmaku(roomInfo.roomId)
+            if (result.success) {
+              connected = true
+              break
+            }
+            if (attempt < 2) {
+              danmakuStore.addLog(`弹幕连接失败，${attempt + 2}/3 次重试...`)
+              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+            }
+          } catch (e) {
+            if (attempt < 2) {
+              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+            }
+          }
+        }
+        if (!connected) {
+          danmakuStore.addLog('弹幕连接失败（已重试3次）')
+        }
       }
     } catch (e) { console.error('[MainView] getBilibiliLiveRoom failed:', e) }
 
@@ -302,17 +333,51 @@ onMounted(async () => {
     }
   }
 
-  // ====== 8. 启动 OBS 叠加层 HTTP 服务（如果设置中已启用） ======
-  updateLoadingProgress(95, '正在启动 OBS 叠加层服务...')
-  try {
-    const result = await window.electronAPI.startObsIfEnabled()
-  } catch {}
+  // ====== 9. 加载弹幕弹窗（如果勾选了的话） ======
+  if (settingsStore.settings.danmakuWindow && settingsStore.settings.identityCode) {
+    updateLoadingProgress(95, '正在加载弹幕弹窗...')
+    try {
+      const code = settingsStore.settings.identityCode
+      const s = settingsStore.settings
+      const params = new URLSearchParams()
+      params.set('roomKeyType', '2')
+      params.set('lang', s.blivechatLang || 'zh')
+      params.set('showDanmaku', s.showDanmaku ? 'true' : 'false')
+      params.set('showGift', s.showPaidMessages ? 'true' : 'false')
+      params.set('showGiftName', s.showGiftName ? 'true' : 'false')
+      params.set('mergeSimilarDanmaku', s.mergeSimilarDanmaku ? 'true' : 'false')
+      params.set('mergeGift', s.mergeSimilarGift ? 'true' : 'false')
+      params.set('maxNumber', String(s.maxDanmakuCount))
+      params.set('minGiftPrice', String(s.minPaidMessagePrice))
+      params.set('blockGiftDanmaku', s.blockGiftDanmaku ? 'true' : 'false')
+      params.set('blockMirrorMessages', s.blockMirrorMessages ? 'true' : 'false')
+      params.set('blockLevel', String(s.blockLevel))
+      params.set('blockMedalLevel', String(s.blockMedalLevel))
+      params.set('blockNewbie', s.blockNewbie ? 'true' : 'false')
+      params.set('blockNotMobileVerified', s.blockNotMobileVerified ? 'true' : 'false')
+      if (s.blockKeywords) params.set('blockKeywords', s.blockKeywords)
+      if (s.blockUsers) params.set('blockUsers', s.blockUsers)
+      params.set('showDebugMessages', s.showDebugMessages ? 'true' : 'false')
+      params.set('relayMessagesByServer', 'true')
+      const url = `https://blive.chat/room/${code}?${params.toString()}`
+      const css = s.customDanmakuCss || defaultDanmakuCss
+      const bgColor = s.danmakuWindowBgColor || 'rgba(0,0,0,0.3)'
+      const opacity = s.danmakuWindowOpacity || 100
+      await window.electronAPI.openDanmakuWindow(url, css, bgColor, opacity)
+      if (s.danmakuWindowFixed) {
+        await window.electronAPI.setDanmakuWindowFixed(true)
+      }
+      await window.electronAPI.setDanmakuWindowShowBorder(s.danmakuWindowShowBorder)
+    } catch (e) {
+      console.error('[MainView] 加载弹幕弹窗失败:', e)
+    }
+  }
 
-  // ====== 9. 通知 App 加载完成，淡出加载屏 ======
+  // ====== 10. 通知 App 加载完成，淡出加载屏 ======
   updateLoadingProgress(100, '加载完成')
   signalMainReady()
 
-  // ====== 10. OBS 叠加层实时广播（歌词 / 队列 / 歌曲信息） ======
+  // ====== 11. OBS 叠加层实时广播（歌词 / 队列 / 歌曲信息） ======
   // 防抖合并短时间内的多次变化
   let obsTimer: ReturnType<typeof setTimeout> | null = null
   let obsPending = false
