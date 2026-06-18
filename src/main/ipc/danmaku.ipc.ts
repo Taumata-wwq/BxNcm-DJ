@@ -5,7 +5,7 @@ import { store } from '../services/store'
 import { sendDanmaku, getEmoticons, getUserEmoticons, getAllEmoticons } from '../services/live-manager'
 import { prefetchNextSongs } from './player.ipc'
 import { emoticonCache } from '../services/emoticon-cache'
-import { sendViewerJoinToDanmakuWindow, sendStatusToDanmakuWindow } from '../services/danmaku/danmaku-window'
+import { sendViewerJoinToDanmakuWindow, sendViewerListSyncToDanmakuWindow, sendStatusToDanmakuWindow } from '../services/danmaku/danmaku-window'
 
 let liveWS: LiveWS | null = null
 
@@ -60,6 +60,11 @@ export function registerDanmakuIpc(mainWindow: BrowserWindow) {
         if (mainWindow.isDestroyed()) return
         mainWindow.webContents.send('danmaku:viewer-join', viewer)
         sendViewerJoinToDanmakuWindow(viewer)
+      }
+      ws.onViewerListSync = (viewers) => {
+        if (mainWindow.isDestroyed()) return
+        mainWindow.webContents.send('danmaku:viewer-list-sync', viewers)
+        sendViewerListSyncToDanmakuWindow(viewers)
       }
       liveWS = ws
       await ws.connect()

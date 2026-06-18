@@ -459,8 +459,8 @@
     fanCountEl.textContent = '粉丝 ' + formatFollowerCount(followerCount);
     fanCountEl.title = '粉丝数: ' + followerCount.toLocaleString();
     // 涨跌颜色
-    if (followerColorTimer) { clearTimeout(followerColorTimer); followerColorTimer = 0; }
     if (prevFollowerCount >= 0 && followerCount !== prevFollowerCount) {
+      if (followerColorTimer) { clearTimeout(followerColorTimer); followerColorTimer = 0; }
       if (followerCount > prevFollowerCount) {
         fanCountEl.classList.add('dm-follower-up'); fanCountEl.classList.remove('dm-follower-down');
         followerColorTimer = setTimeout(function() { fanCountEl.classList.remove('dm-follower-up'); followerColorTimer = 0; }, 60000);
@@ -1160,6 +1160,16 @@
         if (viewerList[i].uid === viewer.uid) { found = true; break; }
       }
       if (!found) { viewerList.push(viewer); updateViewerBar(); setConnected(true); }
+    });
+  }
+
+  // 监听观众全量同步（定时轮询结果，替换列表）
+  if (api && api.onDanmakuViewerListSync) {
+    api.onDanmakuViewerListSync(function(viewers) {
+      if (!viewers || !Array.isArray(viewers)) return;
+      viewerList = viewers;
+      updateViewerBar();
+      if (viewers.length > 0) setConnected(true);
     });
   }
 

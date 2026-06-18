@@ -69,37 +69,32 @@ body.style-mode {
   margin: 0 auto;
   user-select: none;
   -webkit-user-select: none;
-  scrollbar-width: thin;
-  scrollbar-color: #555 #252526;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 body.style-mode::-webkit-scrollbar,
 body.style-mode .style-panel::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  display: none;
 }
 body.style-mode::-webkit-scrollbar-track,
 body.style-mode .style-panel::-webkit-scrollbar-track {
-  background: #1e1e1e;
-  border-left: 1px solid #2d2d2d;
+  display: none;
 }
 body.style-mode::-webkit-scrollbar-thumb,
 body.style-mode .style-panel::-webkit-scrollbar-thumb {
-  background: #3e3e42;
-  border-radius: 5px;
-  border: 2px solid #1e1e1e;
-  transition: background 0.2s;
+  display: none;
 }
 body.style-mode::-webkit-scrollbar-thumb:hover,
 body.style-mode .style-panel::-webkit-scrollbar-thumb:hover {
-  background: #00b5e5;
+  display: none;
 }
 body.style-mode::-webkit-scrollbar-thumb:active,
 body.style-mode .style-panel::-webkit-scrollbar-thumb:active {
-  background: #0099cc;
+  display: none;
 }
 body.style-mode::-webkit-scrollbar-corner,
 body.style-mode .style-panel::-webkit-scrollbar-corner {
-  background: #1e1e1e;
+  display: none;
 }
 .style-mode h1 { font-size: 18px; color: #ddd; margin-bottom: 6px; }
 .style-mode .style-subtitle { font-size: 11px; color: #888; margin-bottom: 16px; }
@@ -119,10 +114,13 @@ body.style-mode .style-panel::-webkit-scrollbar-corner {
 .reset-btn:hover { background: #555; color: #fff; }
 .section-body { display: flex; gap: 14px; overflow: hidden; }
 .section-body.collapsed { max-height: 0; }
-.style-panel { width: 310px; flex-shrink: 0; overflow-y: auto; }
+.style-panel { width: 310px; flex-shrink: 0; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
 .preview-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .preview-box {
   min-height: 400px; border: 1px solid #3e3e42; overflow: hidden; flex: 1;
+}
+@media (max-width: 599px) {
+  .preview-wrap { display: none; }
 }
 .preview-iframe { width: 100%; height: 100%; border: none; }
 .obs-url-bar {

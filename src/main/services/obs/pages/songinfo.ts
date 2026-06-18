@@ -70,10 +70,13 @@ function renderSongInfo(title, artist, requester) {
   var t = document.getElementById('song-title')
   var a = document.getElementById('song-artist')
   var r = document.getElementById('song-requester')
-  if (t) t.textContent = title || ''
-  if (a) {
-    if (currentStyle.splitArtist) a.textContent = artist || ''
-    else a.textContent = ''
+  if (currentStyle.splitArtist) {
+    if (t) t.textContent = title || ''
+    if (a) a.textContent = artist || ''
+  } else {
+    // 不分开时：标题显示 "标题 - 作者"，作者元素隐藏
+    if (t) t.textContent = (title || '') + (artist ? ' - ' + artist : '')
+    if (a) a.textContent = ''
   }
   if (r) {
     if (currentStyle.showRequester) r.textContent = requester ? '\u70b9\u6b4c\u4eba: ' + requester : ''

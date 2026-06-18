@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDanmakuViewerJoin: (cb: (viewer: unknown) => void) => {
     ipcRenderer.on('danmaku:viewer-join', (_, v) => cb(v))
   },
+  onDanmakuViewerListSync: (cb: (viewers: unknown) => void) => {
+    ipcRenderer.on('danmaku:viewer-list-sync', (_, v) => cb(v))
+  },
 
   // 播放器
   playerPlay: (songId: string) => ipcRenderer.invoke('player:play', songId),

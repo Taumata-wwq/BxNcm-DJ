@@ -21,6 +21,7 @@ interface ElectronAPI {
   getCachedEmoticons: (roomId: number) => Promise<{ code: number; roomEmoticons: any; userEmoticons: any; allEmoticons: any; fromCache: boolean }>
   onDanmakuStatusChanged: (cb: (status: import('@shared/types/danmaku').DanmakuStatus) => void) => void
   onDanmakuViewerJoin: (cb: (viewer: import('@shared/types/danmaku').ViewerInfo) => void) => void
+  onDanmakuViewerListSync: (cb: (viewers: Array<import('@shared/types/danmaku').ViewerInfo>) => void) => void
   playerPlay: (songId: string) => Promise<void>
   playerPause: () => Promise<void>
   playerResume: () => Promise<void>

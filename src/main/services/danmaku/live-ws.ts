@@ -41,6 +41,7 @@ export class LiveWS {
   onStatusChange: ((status: DanmakuStatus) => void) | null = null
   onSongRequest: ((req: { song: SongItem; requesterName: string; requesterUid: number }) => void) | null = null
   onViewerJoin: ((viewer: { uid: number; uname: string; avatarUrl: string }) => void) | null = null
+  onViewerListSync: ((viewers: Array<{ uid: number; uname: string; avatarUrl: string }>) => void) | null = null
 
   constructor(roomId: number, uid: number = 0) {
     this.roomId = roomId
@@ -565,6 +566,15 @@ export class LiveWS {
       // 拉取在线观众榜
       const result = await getOnlineRank(this.anchorUid, this.roomId, 1, 50)
       if (result.code === 0 && result.items.length > 0) {
+        // 通知全量同步（替换而非增量添加）
+        if (this.onViewerListSync) {
+          this.onViewerListSync(result.items.map(item => ({
+            uid: item.uid,
+            uname: item.uname,
+            avatarUrl: item.face || '',
+          })))
+        }
+        // 同时通知增量加入（兼容 INTERACT_WORD 的实时事件流）
         for (const item of result.items) {
           if (this.onViewerJoin) {
             this.onViewerJoin({

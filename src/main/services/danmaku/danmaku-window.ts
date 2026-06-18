@@ -399,6 +399,13 @@ export function sendViewerJoinToDanmakuWindow(viewer: { uid: number; uname: stri
   }
 }
 
+/** 广播观众全量列表到弹幕窗口（定时同步，替换而非增量添加） */
+export function sendViewerListSyncToDanmakuWindow(viewers: Array<{ uid: number; uname: string; avatarUrl: string }>): void {
+  if (danmakuWin && !danmakuWin.isDestroyed()) {
+    danmakuWin.webContents.send('danmaku:viewer-list-sync', viewers)
+  }
+}
+
 /** 广播连接状态到弹幕窗口 */
 export function sendStatusToDanmakuWindow(status: { connected: boolean; roomId: number }): void {
   danmakuConnected = status.connected

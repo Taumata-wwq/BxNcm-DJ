@@ -219,18 +219,18 @@ async function fetchFollowerCount() {
       followerCount.value = result.follower
       // 颜色变化标记
       if (prevFollowerCount.value >= 0) {
-        if (followerColorTimer) { clearTimeout(followerColorTimer); followerColorTimer = null }
         if (followerCount.value > prevFollowerCount.value) {
+          if (followerColorTimer) { clearTimeout(followerColorTimer); followerColorTimer = null }
           // 涨粉 → 红色持续 60 秒
           followerColorClass.value = 'dm-follower-up'
           followerColorTimer = setTimeout(() => { followerColorClass.value = '' }, 60000)
         } else if (followerCount.value < prevFollowerCount.value) {
+          if (followerColorTimer) { clearTimeout(followerColorTimer); followerColorTimer = null }
           // 掉粉 → 绿色持续 30 秒
           followerColorClass.value = 'dm-follower-down'
           followerColorTimer = setTimeout(() => { followerColorClass.value = '' }, 30000)
         } else {
-          // 不变 → 恢复原色
-          followerColorClass.value = ''
+          // 不变 → 保持当前颜色（不清除）
         }
       }
     }
@@ -289,6 +289,14 @@ onMounted(() => {
       const viewer = data as { uid: number; uname: string; avatarUrl: string }
       if (viewer && viewer.uid && viewer.uname) {
         danmakuStore.addViewer({ ...viewer, timestamp: Date.now() })
+      }
+    })
+
+    // 监听观众全量同步（定时轮询结果，替换列表）
+    window.electronAPI.onDanmakuViewerListSync((data: any) => {
+      const viewers = data as Array<{ uid: number; uname: string; avatarUrl: string }>
+      if (viewers && Array.isArray(viewers)) {
+        danmakuStore.setViewers(viewers.map(v => ({ ...v, timestamp: Date.now() })))
       }
     })
   } catch {

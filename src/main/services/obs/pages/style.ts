@@ -659,6 +659,8 @@ function connect() {
 document.addEventListener('input', function(e) {
   var el = e.target
   if (!el.closest || !el.closest('.style-section')) return
+  // 文本框和文本域：仅在 blur/Enter 时同步，实时输入不触发
+  if (el.type === 'text' || el.tagName === 'TEXTAREA') return
   applyChange(el)
   var page = el.getAttribute('data-page')
   if (page) postStyleToIframe(page)
