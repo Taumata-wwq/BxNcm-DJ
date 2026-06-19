@@ -133,8 +133,7 @@ export function initUpdater(window: BrowserWindow) {
 
   const boot = store.loadBootData()
   if (boot.autoUpdate) {
-    // 启用自动更新：自动下载并安装
-    autoUpdater.autoDownload = true
+    // 启用自动更新：检查更新但不自动下载，由用户确认后下载
     // 延迟 3 秒检查，避免启动时网络拥堵
     setTimeout(() => {
       autoUpdater.checkForUpdates().catch(err => {

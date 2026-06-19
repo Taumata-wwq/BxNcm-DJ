@@ -1,6 +1,6 @@
 <template>
-  <div class="modal-overlay">
-    <div class="update-dialog">
+  <div class="modal-overlay" @click.self="$emit('close')">
+    <div class="update-dialog" @click.stop>
       <div class="dialog-header">
         <h2>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
