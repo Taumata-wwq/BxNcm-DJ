@@ -108,11 +108,19 @@ onMounted(() => {
   })
 
   window.electronAPI.onPlayerPause(() => {
+    if (playerStore.playerType !== 'audio') return
     cancelFade()
     if (audioEl.value) fadeOutAndPause(audioEl.value)
   })
 
-  window.electronAPI.onPlayerResume(() => {
+  window.electronAPI.onPlayerResume(async () => {
+    // 仅响应音频模式的 resume，视频模式由 VideoPlayer 处理
+    if (playerStore.playerType !== 'audio') return
+    // 首次启动：playUrl 尚未通过 player:play-url 设置，从 store 中获取
+    if (!playUrl.value && playerStore.currentSong?.playUrl) {
+      playUrl.value = playerStore.currentSong.playUrl
+      await nextTick()
+    }
     if (audioEl.value) {
       audioEl.value.play().catch(() => {})
       fadeIn(audioEl.value)

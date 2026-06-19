@@ -74,17 +74,25 @@ onMounted(() => {
   })
 
   window.electronAPI.onPlayerPause(() => {
+    if (playerStore.playerType !== 'video') return
     videoEl.value?.pause()
     playerStore.playing = false
   })
 
-  window.electronAPI.onPlayerResume(() => {
+  window.electronAPI.onPlayerResume(async () => {
+    // 仅响应视频模式的 resume，音频模式由 AudioPlayer 处理
+    if (playerStore.playerType !== 'video') return
+    // 首次启动：videoUrl 尚未通过 player:play-url 设置，从 store 中获取
+    if (!videoUrl.value && playerStore.currentSong?.playUrl) {
+      videoUrl.value = playerStore.currentSong.playUrl
+      await nextTick()
+    }
     videoEl.value?.play().catch(() => {})
     playerStore.playing = true
   })
 
   window.electronAPI.onPlayerSeek((time: number) => {
-    if (playerStore.playerType !== 'audio' && videoEl.value) {
+    if (playerStore.playerType === 'video' && videoEl.value) {
       videoEl.value.currentTime = time
     }
   })
