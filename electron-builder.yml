@@ -37,6 +37,7 @@ nsis:
   menuCategory: true
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
+  artifactName: "BxNcm.DJ.Setup.${version}.${ext}"
 
 portable:
   artifactName: ${productName}-${version}-portable.${ext}
