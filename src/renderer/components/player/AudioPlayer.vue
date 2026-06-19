@@ -1,7 +1,7 @@
 <template>
   <audio
     ref="audioEl"
-    :src="playUrl"
+    :src="playUrl || undefined"
     @loadedmetadata="onLoaded"
     @timeupdate="onTimeUpdate"
     @ended="onEnded"
@@ -166,6 +166,8 @@ function onEnded() {
 
 function onError() {
   if (switchingToVideo || endedSent) return
+  // playUrl 为空时忽略 error（src="" 或 src 被移除引起的误触发）
+  if (!playUrl.value) return
   console.warn('[AudioPlayer] 播放失败，尝试下一首')
   endedSent = true
   window.electronAPI.playerEnded()

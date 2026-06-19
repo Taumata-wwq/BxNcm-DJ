@@ -100,6 +100,11 @@ export async function sendPlayEvent(win: BrowserWindow, song: SongItem): Promise
     }
   }
 
+  // 再检查已有 URL（可能由 preloadFirstSong 预取，避免重复请求）
+  if (!hasUrl && song.playUrl && (!song.playUrlExpire || Date.now() < song.playUrlExpire)) {
+    hasUrl = true
+  }
+
   if (!hasUrl && song.source === 'netease') {
     hasUrl = await fetchSongUrl(song)
   } else if (!hasUrl && song.source === 'bilibili') {

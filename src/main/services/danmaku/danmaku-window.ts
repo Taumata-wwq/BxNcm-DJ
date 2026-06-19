@@ -386,6 +386,8 @@ export function updateDanmakuWindowCss(css: string): boolean {
 
 export function updateDanmakuWindowUrl(url: string): boolean {
   danmakuUrl = url
+  // 持久化到 store，确保托盘等入口能读取到最新 URL
+  store.set('app_danmakuWindowUrl', url)
   if (!danmakuWin || danmakuWin.isDestroyed()) return false
   sendConfig()
   setTimeout(() => injectCssIntoIframe(), 2000)

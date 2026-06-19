@@ -3,7 +3,7 @@ import { join } from 'path'
 import { store } from './store'
 import { isDanmakuWindowOpen, closeDanmakuWindow, openDanmakuWindow, toggleDanmakuWindowFixed, getDanmakuWindowConfig } from './danmaku/danmaku-window'
 import { getObsServerPort } from './obs'
-import { checkForUpdatesExternal } from './updater'
+import { checkForUpdatesExternal, checkForUpdatesFromTray, downloadUpdateExternal } from './updater'
 
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
@@ -135,6 +135,12 @@ function showTrayMenu(bounds: Electron.Rectangle) {
   // 生成点击处理 JS
   function buildClickJs(item: typeof items[0]) {
     if (item.id === 'separator' || item.disabled) return ''
+    // 检查更新：不关闭菜单，通过 console.log 通知主进程异步处理
+    if (item.id === 'check-update') {
+      return `document.getElementById('btn-${item.id}').addEventListener('click', function() {
+      console.log('tray-menu:${item.id}');
+    });`
+    }
     return `document.getElementById('btn-${item.id}').addEventListener('click', function() {
       console.log('tray-menu:${item.id}');
       window.close();
@@ -178,6 +184,7 @@ body {
 .menu-item:hover svg { opacity: 1; }
 .menu-item.disabled:hover svg { opacity: 0.7; }
 .separator { height: 1px; background: ${separatorColor}; margin: 2px 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -201,7 +208,17 @@ ${itemsHtml}
 
   menuWindow.webContents.on('console-message', (_event, _level, message) => {
     if (message.startsWith('tray-menu:')) {
-      selectedAction = message.replace('tray-menu:', '')
+      const action = message.replace('tray-menu:', '')
+      if (action === 'check-update') {
+        // 不关闭菜单，异步检查更新并动态更新菜单项
+        handleTrayCheckUpdate(menuWindow!)
+      } else if (action === 'download-update') {
+        // 下载更新：关闭菜单，在主窗口显示进度
+        selectedAction = 'download-update'
+        closeMenuWindow()
+      } else {
+        selectedAction = action
+      }
     }
   })
 
@@ -209,6 +226,66 @@ ${itemsHtml}
     handleMenuAction(selectedAction)
     menuWindow = null
   })
+}
+
+/** 托盘菜单内检查更新：不关闭菜单，动态更新菜单项文本 */
+async function handleTrayCheckUpdate(menuWin: BrowserWindow) {
+  if (menuWin.isDestroyed()) return
+
+  // 立即更新为"检查中..."
+  updateMenuItemHtml(menuWin, 'btn-check-update', getIconSvg('loader'), '检查中...', true)
+
+  const result = await checkForUpdatesFromTray()
+
+  if (menuWin.isDestroyed()) return
+
+  if (result.error) {
+    updateMenuItemHtml(menuWin, 'btn-check-update', getIconSvg('x'), '检查失败', true)
+    return
+  }
+
+  if (result.available && result.version) {
+    // 有更新：变为"下载更新 v1.x.x"，可点击
+    const version = result.version
+    const iconSvg = getIconSvg('download')
+    const js = `
+      (function() {
+        var el = document.getElementById('btn-check-update');
+        if (!el) return;
+        el.innerHTML = \`${iconSvg}\` + '下载更新 v${version}';
+        el.classList.remove('disabled');
+        el.style.pointerEvents = '';
+        el.style.opacity = '';
+        el.id = 'btn-download-update';
+        el.onclick = function() { console.log('tray-menu:download-update'); window.close(); };
+      })();
+    `
+    menuWin.webContents.executeJavaScript(js).catch(() => {})
+  } else {
+    // 无更新：显示"已是最新版本"
+    updateMenuItemHtml(menuWin, 'btn-check-update', getIconSvg('check'), '已是最新版本', true)
+  }
+}
+
+/** 通过 executeJavaScript 更新菜单项内容 */
+function updateMenuItemHtml(menuWin: BrowserWindow, id: string, iconSvg: string, label: string, disabled: boolean) {
+  const data = JSON.stringify({ icon: iconSvg, label, disabled })
+  const js = `
+    (function() {
+      var data = ${data};
+      var el = document.getElementById('${id}');
+      if (!el) return;
+      el.innerHTML = data.icon + data.label;
+      if (data.disabled) {
+        el.classList.add('disabled');
+        el.style.pointerEvents = 'none';
+      } else {
+        el.classList.remove('disabled');
+        el.style.pointerEvents = '';
+      }
+    })();
+  `
+  menuWin.webContents.executeJavaScript(js).catch(() => {})
 }
 
 /** 执行托盘菜单操作 */
@@ -282,7 +359,15 @@ function handleMenuAction(action: string) {
       break
     }
     case 'check-update':
+      // 托盘菜单内的检查更新已在 handleTrayCheckUpdate 中处理
+      // 此分支仅在外部调用时触发
       checkForUpdatesExternal()
+      break
+    case 'download-update':
+      // 下载更新并显示主窗口
+      downloadUpdateExternal()
+      mainWindow?.show()
+      mainWindow?.focus()
       break
     case 'center':
       mainWindow?.center()
@@ -317,6 +402,8 @@ function getIconSvg(name: string): string {
     pin: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`,
     sliders: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>`,
     download: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+    check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>`,
+    loader: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>`,
     maximize: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`,
     x: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>`,
   }

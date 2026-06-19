@@ -26,7 +26,7 @@ function sendQueueAndFirstSong(win: BrowserWindow): { queue: SongItem[], firstSo
   return { queue, firstSong: current }
 }
 
-/** 启动专用：预取首曲的播放 URL 和歌词，并始终发送 player:play-url 让渲染进程拿到数据 */
+/** 启动专用：预取首曲的播放 URL 和歌词（不发送 player:play-url，避免设置 src 触发自动播放） */
 async function preloadFirstSong(win: BrowserWindow): Promise<void> {
   const first = playlistManager.getQueue()[0]
   if (!first) return
@@ -39,12 +39,6 @@ async function preloadFirstSong(win: BrowserWindow): Promise<void> {
           first.playUrl = url
           first.playUrlExpire = Date.now() + 3600 * 1000
         }
-      }
-      // 始终发送 player:play-url，确保渲染进程拿到播放地址
-      if (first.playUrl) {
-        win.webContents.send('player:play-url', {
-          song: first, playing: false, playerType: 'audio'
-        })
       }
       // 获取歌词
       const lyric = await neteaseApi.getLyric(first.sourceId)
@@ -72,12 +66,6 @@ async function preloadFirstSong(win: BrowserWindow): Promise<void> {
             first.playUrlExpire = Date.now() + 3600 * 1000
           }
         }
-      }
-      // 始终发送 player:play-url，确保渲染进程拿到播放地址
-      if (first.playUrl) {
-        win.webContents.send('player:play-url', {
-          song: first, playing: false, playerType: 'video'
-        })
       }
     } catch (e) {
       console.error('[preloadFirstSong] B站预取失败:', (e as Error).message)

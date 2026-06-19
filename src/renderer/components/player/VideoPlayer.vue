@@ -150,6 +150,8 @@ function onEnded() {
 }
 
 function onError() {
+  // videoUrl 为空时忽略 error（元素销毁引起的误触发）
+  if (!videoUrl.value) return
   errorCount++
   const currentAttempt = loadAttemptId
   console.warn(`[VideoPlayer] 视频错误 #${errorCount} (attempt=${currentAttempt})`)

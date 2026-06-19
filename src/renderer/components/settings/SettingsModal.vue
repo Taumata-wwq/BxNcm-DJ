@@ -825,6 +825,11 @@ onMounted(async () => {
     }, 800)
   }
 
+  // 挂载时立即保存 blivechatUrl 到 store（供托盘等入口使用）
+  if (blivechatUrl.value) {
+    window.electronAPI.updateDanmakuWindowUrl(blivechatUrl.value)
+  }
+
   // 监听自动更新状态
   window.electronAPI.onUpdateStatus?.((s: any) => {
     updateStatus.value = s.status
@@ -856,11 +861,11 @@ watch(
   },
 )
 
-// 监听弹幕设置变化，同步更新弹幕窗口 URL
+// 监听弹幕设置变化，同步更新弹幕窗口 URL（无论窗口是否打开，都持久化到 store 供托盘使用）
 watch(
   () => blivechatUrl.value,
   (url) => {
-    if (danmakuWindowOpen.value && url) {
+    if (url) {
       window.electronAPI.updateDanmakuWindowUrl(url)
     }
   },

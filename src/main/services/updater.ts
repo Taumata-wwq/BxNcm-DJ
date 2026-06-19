@@ -17,6 +17,36 @@ export async function checkForUpdatesExternal() {
   }
 }
 
+/** 从托盘菜单检查更新，返回结构化结果 */
+export async function checkForUpdatesFromTray(): Promise<{ available: boolean; version?: string; error?: string }> {
+  if (!app.isPackaged) {
+    return { available: false }
+  }
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    if (result && result.updateInfo) {
+      const currentVersion = app.getVersion()
+      const remoteVersion = result.updateInfo.version
+      if (remoteVersion > currentVersion) {
+        return { available: true, version: remoteVersion }
+      }
+    }
+    return { available: false }
+  } catch (e) {
+    return { available: false, error: (e as Error)?.message }
+  }
+}
+
+/** 从托盘菜单触发下载更新 */
+export async function downloadUpdateExternal() {
+  if (!app.isPackaged) return
+  try {
+    await autoUpdater.downloadUpdate()
+  } catch (e) {
+    console.warn('[Updater] 下载更新失败:', (e as Error)?.message)
+  }
+}
+
 /** 初始化自动更新模块 */
 export function initUpdater(window: BrowserWindow) {
   mainWindow = window
@@ -34,8 +64,14 @@ export function initUpdater(window: BrowserWindow) {
     }
     try {
       const result = await autoUpdater.checkForUpdates()
+      // electron-updater 在无更新时返回 null；有更新时返回 UpdateCheckResult
+      // 但某些版本即使版本号相同也会返回 result，需要手动比较版本号
       if (result && result.updateInfo) {
-        return { status: 'available', version: result.updateInfo.version }
+        const currentVersion = app.getVersion()
+        const remoteVersion = result.updateInfo.version
+        if (remoteVersion > currentVersion) {
+          return { status: 'available', version: remoteVersion }
+        }
       }
       return { status: 'not-available' }
     } catch (e) {
